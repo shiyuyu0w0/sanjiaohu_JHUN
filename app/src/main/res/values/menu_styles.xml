@@ -1,0 +1,6 @@
+<resources>
+    <style name="MoreMenuAnimation">
+        <item name="android:windowEnterAnimation">@anim/more_menu_enter</item>
+        <item name="android:windowExitAnimation">@anim/more_menu_exit</item>
+    </style>
+</resources>
