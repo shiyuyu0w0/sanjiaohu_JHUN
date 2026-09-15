@@ -7,7 +7,7 @@ import android.widget.Switch;
 final class SwitchTheme {
     static void apply(Switch view,ThemePalette theme){
         int[][] states={{-android.R.attr.state_enabled},{android.R.attr.state_checked},{}};
-        view.setThumbTintList(new ColorStateList(states,new int[]{ThemePalette.mix(theme.primary,theme.surface,.75),theme.deepAccent,0xfffafafa}));
-        view.setTrackTintList(new ColorStateList(states,new int[]{ThemePalette.mix(theme.primary,theme.surface,.9),ThemePalette.mix(theme.primary,0xffffffff,.5),0xffb7bdc3}));
+        view.setThumbTintList(new ColorStateList(states,new int[]{ThemePalette.mix(theme.primary,theme.surface,.75),theme.deepAccent,theme.controlThumb}));
+        view.setTrackTintList(new ColorStateList(states,new int[]{ThemePalette.mix(theme.primary,theme.surface,.9),theme.selectedSurface,theme.disabledTrack}));
     }
 }

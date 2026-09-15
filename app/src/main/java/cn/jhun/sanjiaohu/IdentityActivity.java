@@ -47,10 +47,10 @@ public final class IdentityActivity extends Activity {
         super.onCreate(saved);
         repair=getIntent().getBooleanExtra("repair",false);
         prefs=getSharedPreferences("identity",MODE_PRIVATE);
-        theme=new ThemePalette(getSharedPreferences("settings",MODE_PRIVATE).getInt("themeColor",0xff2ecbff));
+        theme=AppTheme.from(this,getSharedPreferences("settings",MODE_PRIVATE).getInt("themeColor",0xff2ecbff));
         try(InputStream in=getAssets().open("identity-login.js");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] bytes=new byte[4096];int n;while((n=in.read(bytes))!=-1)out.write(bytes,0,n);adapter=out.toString("UTF-8");}catch(IOException e){finish();return;}
         try(InputStream in=getAssets().open("identity-document.js");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] bytes=new byte[2048];int n;while((n=in.read(bytes))!=-1)out.write(bytes,0,n);documentProbe=out.toString("UTF-8");}catch(IOException e){finish();return;}
-        getWindow().setStatusBarColor(theme.surface);getWindow().setNavigationBarColor(theme.surface);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        AppTheme.applySystemBars(this,theme);
         LinearLayout root=column();root.setBackgroundColor(theme.surface);root.setOnApplyWindowInsetsListener((v,i)->{v.setPadding(i.getSystemWindowInsetLeft(),i.getSystemWindowInsetTop(),i.getSystemWindowInsetRight(),i.getSystemWindowInsetBottom());return i.consumeSystemWindowInsets();});
         LinearLayout header=row();header.setPadding(dp(18),dp(10),dp(18),dp(10));header.addView(action("‹",false,()->back()),new LinearLayout.LayoutParams(dp(44),dp(44)));header.getChildAt(0).setContentDescription("返回");
         LinearLayout titles=column();titles.setPadding(dp(14),0,dp(8),0);titles.addView(text(repair?"网上报修":"统一身份认证",20,theme.text,true));subtitle=text("江汉大学 · 校园服务",11,theme.muted,false);titles.addView(subtitle);header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
@@ -243,7 +243,7 @@ public final class IdentityActivity extends Activity {
     LinearLayout row(){LinearLayout v=new LinearLayout(this);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
     void gap(LinearLayout v,int size){v.addView(new View(this),new LinearLayout.LayoutParams(1,dp(size)));}
     TextView text(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(Typeface.create("sans-serif-medium",0));return t;}
-    TextView action(String label,boolean primary,Runnable run){TextView v=text(label,label.length()==1?24:14,primary?theme.onPrimary:theme.deepAccent,true);v.setGravity(Gravity.CENTER);v.setFocusable(true);v.setBackground(new RippleDrawable(ColorStateList.valueOf((theme.primary&0xffffff)|0x33000000),shape(primary?theme.primary:theme.entrySurface,15),shape(Color.WHITE,15)));v.setOnClickListener(view->run.run());return v;}
+    TextView action(String label,boolean primary,Runnable run){TextView v=text(label,label.length()==1?24:14,primary?theme.onPrimary:theme.deepAccent,true);v.setGravity(Gravity.CENTER);v.setFocusable(true);v.setBackground(new RippleDrawable(ColorStateList.valueOf((theme.primary&0xffffff)|0x33000000),shape(primary?theme.primary:theme.entrySurface,15),shape(theme.rippleMask,15)));v.setOnClickListener(view->run.run());return v;}
     EditText input(String hint,boolean secret){EditText v=new EditText(this);v.setHint(hint);v.setSingleLine(true);v.setTextSize(16);v.setTextColor(theme.text);v.setHintTextColor(theme.muted);v.setPadding(dp(16),0,dp(16),0);v.setBackground(shape(theme.entrySurface,16));v.setInputType(InputType.TYPE_CLASS_TEXT|(secret?InputType.TYPE_TEXT_VARIATION_PASSWORD:InputType.TYPE_TEXT_VARIATION_NORMAL));v.setSaveEnabled(false);v.setAutofillHints(secret?View.AUTOFILL_HINT_PASSWORD:View.AUTOFILL_HINT_USERNAME);return v;}
     LinearLayout.LayoutParams field(){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(56));lp.bottomMargin=dp(14);return lp;}
     GradientDrawable shape(int color,int radius){GradientDrawable v=new GradientDrawable();v.setColor(color);v.setCornerRadius(dp(radius));return v;}

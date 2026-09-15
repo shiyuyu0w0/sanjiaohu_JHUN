@@ -27,9 +27,8 @@ public final class CampusMapActivity extends Activity {
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
-        theme=new ThemePalette(getSharedPreferences("settings",MODE_PRIVATE).getInt("themeColor",0xff2ecbff));
-        getWindow().setStatusBarColor(theme.surface);getWindow().setNavigationBarColor(theme.surface);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        theme=AppTheme.from(this,getSharedPreferences("settings",MODE_PRIVATE).getInt("themeColor",0xff2ecbff));
+        AppTheme.applySystemBars(this,theme);
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(theme.surface);
         root.setOnApplyWindowInsetsListener((v,i)->{v.setPadding(i.getSystemWindowInsetLeft(),i.getSystemWindowInsetTop(),i.getSystemWindowInsetRight(),i.getSystemWindowInsetBottom());return i.consumeSystemWindowInsets();});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(18),dp(10),dp(18),dp(10));
