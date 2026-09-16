@@ -8,6 +8,7 @@ build/
 local.properties
 
 # --- 签名密钥：泄露等于他人可冒名签名，永不提交 ---
+signing/
 *.jks
 *.keystore
 development.keystore
