@@ -245,7 +245,7 @@ public class MainActivity extends Activity {
     }
     void refreshAppearance(){
         wallpaper=WallpaperStore.load(this);int primary=prefs.getBoolean("manualTheme",false)?prefs.getInt("manualThemeColor",0xff2ecbff):backgroundPrimary();
-        palette=new ThemePalette(primary);BG=palette.surface;INK=palette.text;MUTED=palette.muted;PRIMARY=palette.primary;ACCENT_TEXT=palette.accent;ON_PRIMARY=palette.onPrimary;
+        palette=AppTheme.from(this,primary);BG=palette.surface;INK=palette.text;MUTED=palette.muted;PRIMARY=palette.primary;ACCENT_TEXT=palette.accent;ON_PRIMARY=palette.onPrimary;
         prefs.edit().putInt("themeColor",PRIMARY).apply();
     }
     int backgroundPrimary(){return wallpaper==null?0xff2ecbff:WallpaperStore.dominant(wallpaper);}
@@ -269,7 +269,7 @@ public class MainActivity extends Activity {
         if(pageAnimator!=null){pageAnimator.cancel();pageAnimator=null;}
         visibleCards.clear();selectedWeek=Math.max(1,Math.min(selectedWeek,maxWeek()));
         if(moreMenu!=null && moreMenu.isShowing())moreMenu.dismiss();
-        root.setBackgroundColor(BG);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+        root.setBackgroundColor(BG);AppTheme.applySystemBars(this,palette);
         if(screen!=null)root.removeView(screen);authStatusText=null;
         screen=column();screen.setPadding(dp(10),dp(3),dp(10),dp(3));root.addView(screen,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout mast=row();mast.setMinimumHeight(dp(48));LinearLayout brand=column();brand.addView(label(page==3?"成绩":page==2?"个人":"三角狐",25,INK,true));mast.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
@@ -290,14 +290,14 @@ public class MainActivity extends Activity {
             ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.addView(page==0?homeView():page==3?gradesView():userView());pageContent.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         }
         stateText=label(page==3?gradeState:state,10,MUTED,false);stateText.setPadding(dp(2),dp(5),dp(2),dp(4));stateText.setMaxLines(2);screen.addView(stateText);
-        LinearLayout nav=row();nav.setPadding(dp(5),dp(3),dp(5),dp(3));nav.setBackground(shape(ThemePalette.mix(PRIMARY,Color.WHITE,.95),22));
+        LinearLayout nav=row();nav.setPadding(dp(5),dp(3),dp(5),dp(3));nav.setBackground(shape(palette.sheetSurface,22));
         final GradientDrawable[] tabBackgrounds=new GradientDrawable[3];final MoreMenu.Icon[] tabIcons=new MoreMenu.Icon[3];final TextView[] tabLabels=new TextView[3];
         String[] titles={"首页","课程","个人"};for(int i=0;i<3;i++){
-            final int target=i;boolean selected=(page==3?0:page)==i;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(3),0,dp(3));item.setBaselineAligned(false);tabBackgrounds[i]=shape(selected?ThemePalette.mix(PRIMARY,Color.WHITE,.65):Color.TRANSPARENT,16);item.setBackground(tabBackgrounds[i]);
+            final int target=i;boolean selected=(page==3?0:page)==i;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(3),0,dp(3));item.setBaselineAligned(false);tabBackgrounds[i]=shape(selected?palette.selectedSurface:Color.TRANSPARENT,16);item.setBackground(tabBackgrounds[i]);
             MoreMenu.Icon icon=new MoreMenu.Icon(this,i+2,selected?INK:MUTED);item.addView(icon,new LinearLayout.LayoutParams(dp(32),dp(30)));TextView navLabel=label(titles[i],11,selected?INK:MUTED,selected);navLabel.setGravity(Gravity.CENTER);navLabel.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);navLabel.setIncludeFontPadding(false);navLabel.setSingleLine(true);item.addView(navLabel,new LinearLayout.LayoutParams(-1,dp(18)));item.setSelected(selected);item.setContentDescription(titles[i]+(selected?"，已选中":""));item.setFocusable(true);tabIcons[i]=icon;tabLabels[i]=navLabel;item.setOnClickListener(v->switchPage(target));nav.addView(item,new LinearLayout.LayoutParams(0,dp(54),1));
         }screen.addView(nav,new LinearLayout.LayoutParams(-1,dp(60)));
         if(transitionFrom>=0&&android.animation.ValueAnimator.areAnimatorsEnabled()){
-            final int from=transitionFrom==3?0:transitionFrom,to=page==3?0:page;final int selectedColor=ThemePalette.mix(PRIMARY,Color.WHITE,.65);final float offset=dp(10)*(to>from?1:-1);
+            final int from=transitionFrom==3?0:transitionFrom,to=page==3?0:page;final int selectedColor=palette.selectedSurface;final float offset=dp(10)*(to>from?1:-1);
             android.animation.ArgbEvaluator evaluator=new android.animation.ArgbEvaluator();pageAnimator=android.animation.ValueAnimator.ofFloat(0,1);pageAnimator.setDuration(200);pageAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
             pageAnimator.addUpdateListener(animation->{float t=(Float)animation.getAnimatedValue();pageContent.setAlpha(.2f+.8f*t);pageContent.setTranslationX(offset*(1-t));for(int i=0;i<3;i++){tabBackgrounds[i].setColor((Integer)evaluator.evaluate(t,i==from?selectedColor:selectedColor&0xffffff,i==to?selectedColor:selectedColor&0xffffff));int color=(Integer)evaluator.evaluate(t,i==from?INK:MUTED,i==to?INK:MUTED);tabIcons[i].setColor(color);tabLabels[i].setTextColor(color);}});pageAnimator.start();
         }
@@ -354,7 +354,7 @@ public class MainActivity extends Activity {
     }
     String displayValue(String value){return value==null||value.trim().isEmpty()?"—":value;}
     View iconButton(String title,int id,Runnable action){
-        FrameLayout hit=new FrameLayout(this);MoreMenu.Icon icon=new MoreMenu.Icon(this,id,palette.deepAccent);icon.setBackground(shape(palette.entrySurface,11));icon.setDuplicateParentStateEnabled(true);hit.addView(icon,new FrameLayout.LayoutParams(dp(32),dp(32),Gravity.CENTER));hit.setContentDescription(title);hit.setFocusable(true);hit.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),null,shape(Color.WHITE,12)));hit.setOnClickListener(v->action.run());return hit;
+        FrameLayout hit=new FrameLayout(this);MoreMenu.Icon icon=new MoreMenu.Icon(this,id,palette.deepAccent);icon.setBackground(shape(palette.entrySurface,11));icon.setDuplicateParentStateEnabled(true);hit.addView(icon,new FrameLayout.LayoutParams(dp(32),dp(32),Gravity.CENTER));hit.setContentDescription(title);hit.setFocusable(true);hit.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),null,shape(palette.rippleMask,12)));hit.setOnClickListener(v->action.run());return hit;
     }
     void showGradeSummary(){
         summaryAll=true;UiSheet sheet=new UiSheet(this,"成绩汇总","学校统计 · 主修有效成绩",.83f);gradeSummarySheet=sheet;
@@ -374,11 +374,11 @@ public class MainActivity extends Activity {
             for(int r=0;r<2;r++){LinearLayout metrics=row();for(int col=0;col<2;col++){int i=r*2+col;LinearLayout metric=column();metric.setPadding(dp(14),dp(13),dp(14),dp(13));metric.setBackground(shape(palette.entrySurface,16));metric.addView(label(displayValue(values[i]),23,palette.deepAccent,true));space(metric,5);metric.addView(label(labels[i],11,ThemePalette.readable(MUTED,palette.entrySurface,4.5),false));LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(0,-2,1);if(col==1)size.leftMargin=dp(10);metrics.addView(metric,size);}body.addView(metrics);space(body,10);}
             space(body,10);body.addView(label("各环节统计",17,INK,true));space(body,12);
             LinearLayout columns=row();columns.addView(label("课程环节",11,MUTED,false),new LinearLayout.LayoutParams(0,-2,1));for(String name:new String[]{"已修学分","平均成绩"}){TextView title=label(name,11,MUTED,false);title.setGravity(Gravity.RIGHT);columns.addView(title,new LinearLayout.LayoutParams(dp(66),-2));}body.addView(columns);space(body,5);
-            for(Grades.Metric group:data.groups){LinearLayout line=row();line.setPadding(0,dp(12),0,dp(12));TextView name=label(group.name,13,INK,false);name.setPadding(0,0,dp(8),0);line.addView(name,new LinearLayout.LayoutParams(0,-2,1));for(String value:new String[]{group.earned,group.average}){TextView number=label(displayValue(value),14,palette.deepAccent,true);number.setGravity(Gravity.RIGHT);line.addView(number,new LinearLayout.LayoutParams(dp(66),-2));}body.addView(line);View rule=new View(this);rule.setBackgroundColor(ThemePalette.mix(PRIMARY,Color.WHITE,.88));body.addView(rule,new LinearLayout.LayoutParams(-1,dp(1)));}
+            for(Grades.Metric group:data.groups){LinearLayout line=row();line.setPadding(0,dp(12),0,dp(12));TextView name=label(group.name,13,INK,false);name.setPadding(0,0,dp(8),0);line.addView(name,new LinearLayout.LayoutParams(0,-2,1));for(String value:new String[]{group.earned,group.average}){TextView number=label(displayValue(value),14,palette.deepAccent,true);number.setGravity(Gravity.RIGHT);line.addView(number,new LinearLayout.LayoutParams(dp(66),-2));}body.addView(line);View rule=new View(this);rule.setBackgroundColor(palette.outline);body.addView(rule,new LinearLayout.LayoutParams(-1,dp(1)));}
         }
         space(body,12);TextView note=label(summaryAll?summaryState:gradeState,11,MUTED,false);note.setLineSpacing(dp(3),1);body.addView(note);
     }
-    LinearLayout panel(){LinearLayout p=column();p.setPadding(dp(20),dp(20),dp(20),dp(20));p.setBackground(shape(ThemePalette.mix(PRIMARY,Color.WHITE,.9),22));return p;}
+    LinearLayout panel(){LinearLayout p=column();p.setPadding(dp(20),dp(20),dp(20),dp(20));p.setBackground(shape(palette.panel,22));return p;}
     void space(LinearLayout parent,int size){parent.addView(new View(this),new LinearLayout.LayoutParams(1,dp(size)));}
     View homeView(){
         LinearLayout content=column();content.setPadding(dp(6),dp(16),dp(6),dp(18));TextView heading=label("常用入口",17,INK,true);content.addView(heading);space(content,14);
@@ -391,7 +391,7 @@ public class MainActivity extends Activity {
         startActivity(new Intent(this,CampusMapActivity.class));
     }
     View homeEntry(String title,String subtitle,int iconId,Runnable action){
-        LinearLayout entry=column();entry.setPadding(dp(16),dp(14),dp(16),dp(14));entry.setMinimumHeight(dp(112));entry.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),shape(palette.entrySurface,20),shape(Color.WHITE,20)));
+        LinearLayout entry=column();entry.setPadding(dp(16),dp(14),dp(16),dp(14));entry.setMinimumHeight(dp(112));entry.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),shape(palette.entrySurface,20),shape(palette.rippleMask,20)));
         MoreMenu.Icon icon=new MoreMenu.Icon(this,iconId,palette.deepAccent);entry.addView(icon,new LinearLayout.LayoutParams(dp(32),dp(32)));space(entry,8);entry.addView(label(title,15,INK,true));TextView note=label(subtitle,11,ThemePalette.readable(MUTED,palette.entrySurface,4.5),false);note.setPadding(0,dp(4),0,0);entry.addView(note);entry.setContentDescription(title+"，"+subtitle);entry.setFocusable(true);entry.setOnClickListener(v->action.run());return entry;
     }
     void showCustomCourses(){
@@ -403,7 +403,7 @@ public class MainActivity extends Activity {
     }
     String authStatus(){if(credentialBusy)return "正在处理本机凭证…";if(autoRunning)return "正在自动登录…";if(verified)return "已登录 · 教务连接正常";if(prefs.getBoolean("autoBlocked",false))return "需要重新登录或验证码";if(prefs.getBoolean("loginCompleted",false))return busy?"登录状态验证中…":"登录状态待联网验证";return "未登录";}
     View userView(){
-        LinearLayout content=column();content.setPadding(dp(6),dp(12),dp(6),dp(18));LinearLayout user=panel();MoreMenu.Icon avatar=new MoreMenu.Icon(this,4,INK);avatar.setBackground(shape(ThemePalette.mix(PRIMARY,Color.WHITE,.6),20));user.addView(avatar,new LinearLayout.LayoutParams(dp(60),dp(60)));space(user,16);user.addView(label("教务账号",22,INK,true));space(user,8);authStatusText=label(authStatus(),15,INK,true);user.addView(authStatusText);
+        LinearLayout content=column();content.setPadding(dp(6),dp(12),dp(6),dp(18));LinearLayout user=panel();MoreMenu.Icon avatar=new MoreMenu.Icon(this,4,INK);avatar.setBackground(shape(palette.selectedSurface,20));user.addView(avatar,new LinearLayout.LayoutParams(dp(60),dp(60)));space(user,16);user.addView(label("教务账号",22,INK,true));space(user,8);authStatusText=label(authStatus(),15,INK,true);user.addView(authStatusText);
         long at=prefs.getLong("lastAuthAt",0);if(at>0){space(user,6);user.addView(label("最近验证 "+stamp(at),12,MUTED,false));}space(user,20);
         TextView login=button(verified?"重新登录 / 更换账号":"登录教务账号",()->showLogin());login.setBackground(shape(PRIMARY,16));login.setTextColor(ON_PRIMARY);user.addView(login,new LinearLayout.LayoutParams(-1,dp(48)));content.addView(user);space(content,16);
         LinearLayout storage=panel();Switch automatic=new Switch(this);SwitchTheme.apply(automatic,palette);automatic.setText("自动登录");automatic.setTextSize(16);automatic.setTextColor(INK);automatic.setChecked(prefs.getBoolean("autoLogin",true)&&CredentialStore.exists(this));automatic.setEnabled(!credentialBusy);storage.addView(automatic);space(storage,10);
@@ -450,19 +450,19 @@ public class MainActivity extends Activity {
     }
     int courseColor(Course c){String key="course-color:"+c.name;int index=prefs.getInt(key,-1);if(index<0){index=prefs.getInt("next-course-color",0);prefs.edit().putInt(key,index).putInt("next-course-color",index+1).apply();}return CourseColors.PALETTE[Math.floorMod(index,CourseColors.PALETTE.length)];}
     View weekView(){
-        WeekGridView grid=new WeekGridView(this,dp(33),dp(32),dp(14));grid.setBackground(wallpaper==null?shape(ThemePalette.mix(PRIMARY,0xffffffff,.88),12):new WallpaperDrawable(wallpaper,dp(33),dp(32),ThemePalette.mix(PRIMARY,Color.WHITE,.83)));
+        WeekGridView grid=new WeekGridView(this,dp(33),dp(32),dp(14));grid.setBackground(wallpaper==null?shape(palette.gridSurface,12):new WallpaperDrawable(wallpaper,dp(33),dp(32),palette.gridSurface,palette.wallpaperScrim));
         String[] days={"一","二","三","四","五","六","日"};LocalDate a=anchor();
         LocalDate monday=a==null?today().minusDays(today().getDayOfWeek().getValue()-1).plusWeeks(selectedWeek-currentWeek()):a.plusWeeks(selectedWeek-1);
         for(int d=1;d<=7;d++){
             LocalDate date=monday.plusDays(d-1);boolean isToday=date.equals(today());String text="周"+days[d-1]+"\n"+(isToday&&todayLabel?"今日":date.getDayOfMonth());
-            TextView h=label(text,10,isToday?Color.WHITE:INK,true);h.setGravity(Gravity.CENTER);h.setIncludeFontPadding(false);
+            TextView h=label(text,10,isToday?ThemePalette.neutralText(palette.deepAccent):INK,true);h.setGravity(Gravity.CENTER);h.setIncludeFontPadding(false);
             if(isToday){h.setBackground(shape(palette.deepAccent,9));final String weekday="周"+days[d-1];h.setContentDescription("今天，"+date+"，点按切换今日或日期");h.setFocusable(true);h.setOnClickListener(v->{todayLabel=!todayLabel;h.setText(weekday+"\n"+(todayLabel?"今日":date.getDayOfMonth()));});}
-            else h.setBackground(shape(ThemePalette.mix(PRIMARY,Color.WHITE,.83),7));
+            else h.setBackground(shape(palette.gridSurface,7));
             grid.add(h,WeekGridView.HEADER,d,1,1,0,1);
         }
         for(int p=1;p<=12;p++){
-            TextView time=label(p+"\n"+activeSchedule().starts[p]+"\n"+activeSchedule().ends[p],7,ThemePalette.readable(MUTED,ThemePalette.mix(PRIMARY,Color.WHITE,.83),4.5),false);time.setAutoSizeTextTypeUniformWithConfiguration(5,8,1,android.util.TypedValue.COMPLEX_UNIT_SP);time.setContentDescription("第 "+p+" 节，"+activeSchedule().starts[p]+" 上课，"+activeSchedule().ends[p]+" 下课");time.setGravity(Gravity.CENTER);time.setIncludeFontPadding(false);time.setBackground(shape(ThemePalette.mix(PRIMARY,Color.WHITE,.83),5));grid.add(time,WeekGridView.TIME,1,p,p,0,1);
-            for(int d=1;d<=7;d++){View cell=new View(this);cell.setBackground(shape(wallpaper==null?BG:0x15ffffff,5));grid.add(cell,WeekGridView.CELL,d,p,p,0,1);}
+            TextView time=label(p+"\n"+activeSchedule().starts[p]+"\n"+activeSchedule().ends[p],7,ThemePalette.readable(MUTED,palette.gridSurface,4.5),false);time.setAutoSizeTextTypeUniformWithConfiguration(5,8,1,android.util.TypedValue.COMPLEX_UNIT_SP);time.setContentDescription("第 "+p+" 节，"+activeSchedule().starts[p]+" 上课，"+activeSchedule().ends[p]+" 下课");time.setGravity(Gravity.CENTER);time.setIncludeFontPadding(false);time.setBackground(shape(palette.gridSurface,5));grid.add(time,WeekGridView.TIME,1,p,p,0,1);
+            for(int d=1;d<=7;d++){View cell=new View(this);cell.setBackground(shape(wallpaper==null?BG:(palette.dark?0x15000000:0x15ffffff),5));grid.add(cell,WeekGridView.CELL,d,p,p,0,1);}
         }
         List<Course> courses=CustomCourses.at(activeSchedule().courses,localCourses,activeSchedule().term,selectedWeek);Map<Course,Integer> lanes=new IdentityHashMap<>(),counts=new IdentityHashMap<>();
         for(int d=1;d<=7;d++){List<Course> cluster=new ArrayList<>();int end=0;for(Course c:courses){if(c.day!=d)continue;if(!cluster.isEmpty()&&c.start>end){assign(cluster,lanes,counts);cluster.clear();}cluster.add(c);end=Math.max(cluster.size()==1?0:end,c.end);}assign(cluster,lanes,counts);}
@@ -472,8 +472,8 @@ public class MainActivity extends Activity {
             card.setAutoSizeTextTypeUniformWithConfiguration(6,11,1,android.util.TypedValue.COMPLEX_UNIT_SP);styleCourseCard(card,cardColor,transparency());
             card.setContentDescription(c.name+"，"+c.room+"，第"+c.start+"至"+c.end+"节，点按查看完整详情");card.setFocusable(true);card.setOnClickListener(v->detail(c));grid.add(card,WeekGridView.CELL,c.day,segmentStart,segmentEnd,lanes.get(c),counts.get(c));
         }
-        for(int after:new int[]{4,8}){String title=after==4?"午休":"晚餐";TextView gap=label(title+"  "+activeSchedule().ends[after]+"–"+activeSchedule().starts[after+1],8,palette.deepAccent,false);gap.setGravity(Gravity.CENTER);gap.setIncludeFontPadding(false);gap.setBackgroundColor(ThemePalette.mix(PRIMARY,Color.WHITE,.9));grid.add(gap,WeekGridView.BREAK,1,after,after,0,1);}
-        if(courses.isEmpty()){TextView free=label(schedule==null?"暂无该学期课表，联网后获取":"这一周没有课程安排",14,ACCENT_TEXT,true);free.setGravity(Gravity.CENTER);free.setShadowLayer(dp(3),0,0,Color.WHITE);grid.add(free,WeekGridView.EMPTY,1,1,12,0,1);}
+        for(int after:new int[]{4,8}){String title=after==4?"午休":"晚餐";TextView gap=label(title+"  "+activeSchedule().ends[after]+"–"+activeSchedule().starts[after+1],8,palette.deepAccent,false);gap.setGravity(Gravity.CENTER);gap.setIncludeFontPadding(false);gap.setBackgroundColor(palette.controlSurface);grid.add(gap,WeekGridView.BREAK,1,after,after,0,1);}
+        if(courses.isEmpty()){TextView free=label(schedule==null?"暂无该学期课表，联网后获取":"这一周没有课程安排",14,ACCENT_TEXT,true);free.setGravity(Gravity.CENTER);free.setShadowLayer(dp(3),0,0,palette.dark?Color.BLACK:Color.WHITE);grid.add(free,WeekGridView.EMPTY,1,1,12,0,1);}
         return grid;
     }
     void assign(List<Course> group,Map<Course,Integer> lanes,Map<Course,Integer> counts){List<Integer> ends=new ArrayList<>();for(Course c:group){int i=0;while(i<ends.size()&&ends.get(i)>=c.start)i++;if(i==ends.size())ends.add(c.end);else ends.set(i,c.end);lanes.put(c,i);}for(Course c:group)counts.put(c,ends.size());}
@@ -485,7 +485,7 @@ public class MainActivity extends Activity {
     void styleCourseCard(CourseCardView card,int color,int transparency){card.setBackground(shape(CourseAppearance.background(color,transparency),6));card.setAppearance(color,transparency,BG);}
     void showTransparency(){
         UiSheet sheet=new UiSheet(this,"课程透明度","只调整课程底色，文字自动适应背景明暗",.56f);LinearLayout body=sheet.body;int initial=transparency();final int[] value={initial};
-        FrameLayout preview=new FrameLayout(this);preview.setBackground(wallpaper==null?shape(ThemePalette.mix(PRIMARY,Color.WHITE,.86),18):new WallpaperDrawable(wallpaper,0,0,BG));preview.setClipToOutline(true);
+        FrameLayout preview=new FrameLayout(this);preview.setBackground(wallpaper==null?shape(palette.controlSurface,18):new WallpaperDrawable(wallpaper,0,0,BG,palette.wallpaperScrim));preview.setClipToOutline(true);
         LinearLayout examples=row();examples.setPadding(dp(16),dp(15),dp(16),dp(15));preview.addView(examples,new FrameLayout.LayoutParams(-1,-1));CourseCardView[] cards=new CourseCardView[3];String[] names={"高等数学\n教学楼 A101","大学英语\n教学楼 B202","自定义课程\n图书馆"};for(int i=0;i<3;i++){CourseCardView c=new CourseCardView(this);c.setText(names[i]);c.setTextSize(12);c.setGravity(Gravity.CENTER);c.setPadding(dp(5),dp(5),dp(5),dp(5));c.setIncludeFontPadding(false);c.setTag(CourseColors.PALETTE[i]);cards[i]=c;styleCourseCard(c,CourseColors.PALETTE[i],initial);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);if(i>0)lp.leftMargin=dp(8);examples.addView(c,lp);}body.addView(preview,new LinearLayout.LayoutParams(-1,dp(116)));space(body,15);
         TextView percent=label("透明度 "+initial+"%",16,INK,true);percent.setGravity(Gravity.CENTER);body.addView(percent,new LinearLayout.LayoutParams(-1,-2));SeekBar slider=new SeekBar(this);slider.setMax(100);slider.setProgress(initial);slider.setProgressTintList(android.content.res.ColorStateList.valueOf(PRIMARY));slider.setThumbTintList(android.content.res.ColorStateList.valueOf(PRIMARY));slider.setContentDescription("课程卡片透明度，百分之零为不透明，百分之一百为底色完全透明");body.addView(slider,new LinearLayout.LayoutParams(-1,dp(44)));
         LinearLayout ends=row();TextView solid=label("不透明",11,MUTED,false),clear=label("全透明",11,MUTED,false);ends.addView(solid,new LinearLayout.LayoutParams(0,-2,1));clear.setGravity(Gravity.RIGHT);ends.addView(clear,new LinearLayout.LayoutParams(0,-2,1));body.addView(ends);space(body,12);
@@ -500,11 +500,11 @@ public class MainActivity extends Activity {
     LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
     LinearLayout.LayoutParams weighted(){return new LinearLayout.LayoutParams(0,dp(44),1);}
     TextView label(String s,int size,int color,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setFontFeatureSettings("kern");if(bold)v.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));return v;}
-    TextView button(String s,Runnable action){TextView v=label(s,13,ACCENT_TEXT,true);v.setGravity(Gravity.CENTER);v.setPadding(dp(12),dp(10),dp(12),dp(10));v.setMinHeight(dp(44));v.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x33000000),shape(Color.TRANSPARENT,14),shape(Color.WHITE,14)));v.setOnClickListener(x->action.run());v.setFocusable(true);v.setContentDescription(s);return v;}
+    TextView button(String s,Runnable action){TextView v=label(s,13,ACCENT_TEXT,true);v.setGravity(Gravity.CENTER);v.setPadding(dp(12),dp(10),dp(12),dp(10));v.setMinHeight(dp(44));v.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x33000000),shape(Color.TRANSPARENT,14),shape(palette.rippleMask,14)));v.setOnClickListener(x->action.run());v.setFocusable(true);v.setContentDescription(s);return v;}
     TextView themedButton(String text,Runnable action,boolean filled){
         TextView control=button(text,action);control.setTextColor(filled?ON_PRIMARY:palette.deepAccent);control.setIncludeFontPadding(false);control.setPadding(dp(14),0,dp(14),0);
-        GradientDrawable surface=shape(filled?PRIMARY:palette.entrySurface,15);if(!filled)surface.setStroke(dp(1),ThemePalette.mix(PRIMARY,Color.WHITE,.55));
-        control.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(((filled?ON_PRIMARY:PRIMARY)&0xffffff)|0x22000000),surface,shape(Color.WHITE,15)));return control;
+        GradientDrawable surface=shape(filled?PRIMARY:palette.entrySurface,15);if(!filled)surface.setStroke(dp(1),palette.outline);
+        control.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(((filled?ON_PRIMARY:PRIMARY)&0xffffff)|0x22000000),surface,shape(palette.rippleMask,15)));return control;
     }
     GradientDrawable shape(int c,int radius){GradientDrawable d=new GradientDrawable();d.setColor(c);d.setCornerRadius(dp(radius));return d;}
 }
