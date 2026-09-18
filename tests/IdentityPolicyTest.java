@@ -61,14 +61,16 @@ public final class IdentityPolicyTest {
         }
         check(!IdentityPolicy.auth(IdentityPolicy.ELECTRICITY_LOGIN+"&data={\"test\":1}"));
         try{check(!IdentityPolicy.auth("http://authserver.jhun.edu.cn/authserver/login?service="+java.net.URLEncoder.encode("https://hub.17wanxiao.com/?data={test}&service=https://evil.invalid/","UTF-8")));}catch(Exception e){throw new AssertionError(e);}
-        String relay="https://open.17wanxiao.com/";
+        for(String relayHost:new String[]{"open","wapnew"}){
+        String relay="https://"+relayHost+".17wanxiao.com/";
         for(String value:new String[]{relay,relay.replace(".com/",".com:443/"),relay+"?state={test}"}){
             check(IdentityPolicy.allowed(value));check(IdentityPolicy.electricityRelay(value));check(IdentityPolicy.electricity(value));check(!IdentityPolicy.auth(value));
         }
-        for(String value:new String[]{relay.replace("https:","http:"),relay.replace(".com/",".com:18443/"),relay.replace(".com/",".com:8443/"),relay.replace(".com/",".com.evil.invalid/"),relay.replace("open.","user@open."),relay.replace("open.","other.")}){
+        for(String value:new String[]{relay.replace("https:","http:"),relay.replace(".com/",".com:18443/"),relay.replace(".com/",".com:8443/"),relay.replace(".com/",".com.evil.invalid/"),relay.replace(relayHost+".","user@"+relayHost+"."),relay.replace(relayHost+".","other.")}){
             check(!IdentityPolicy.allowed(value));check(!IdentityPolicy.electricityRelay(value));check(!IdentityPolicy.electricity(value));
         }
         try{check(!IdentityPolicy.auth("http://authserver.jhun.edu.cn/authserver/login?service="+java.net.URLEncoder.encode(relay,"UTF-8")));}catch(Exception e){throw new AssertionError(e);}
+        }
         System.out.println("Identity URL policy: "+checks+" checks passed");
     }
 }

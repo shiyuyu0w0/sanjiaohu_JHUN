@@ -277,7 +277,7 @@ public class MainActivity extends Activity {
         if(page==3)mast.addView(themedButton("返回首页",()->switchPage(0),false),new LinearLayout.LayoutParams(-2,dp(40)));
         if(page==1){TextView menu=label("⋮",28,ACCENT_TEXT,true);menu.setGravity(Gravity.CENTER);menu.setContentDescription("更多选项");menu.setFocusable(true);menu.setOnClickListener(v->showMenu(v));mast.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48)));}screen.addView(mast);
         LinearLayout pageContent=column();screen.addView(pageContent,new LinearLayout.LayoutParams(-1,0,1));
-        TextView term=label(page==1?(selectedTerm.isEmpty()?"选择学期":selectedTerm)+" ⌄":page==3?(gradeTerm.isEmpty()?"选择学期":gradeTerm)+" ⌄":page==0?"日常所需，从这里开始。":"教务账号与本机设置",12,MUTED,false);term.setPadding(dp(8),0,dp(8),dp(5));
+        TextView term=label(page==1?(selectedTerm.isEmpty()?"选择学期":selectedTerm)+" ⌄":page==3?(gradeTerm.isEmpty()?"选择学期":gradeTerm)+" ⌄":page==0?"悠悠不山山 含含是散散":"教务账号与本机设置",12,MUTED,false);term.setPadding(dp(8),0,dp(8),dp(5));
         if(page==1||page==3){term.setTextColor(palette.deepAccent);term.setMinHeight(dp(40));term.setGravity(Gravity.CENTER_VERTICAL);term.setBackground(shape(palette.entrySurface,12));term.setOnClickListener(v->chooseSemester(page==3));term.setFocusable(true);term.setContentDescription("选择学期，"+(page==3?gradeTerm:selectedTerm));}
         pageContent.addView(term,new LinearLayout.LayoutParams(-1,-2));
         if(page==1){
@@ -385,10 +385,14 @@ public class MainActivity extends Activity {
         LinearLayout top=row();top.addView(homeEntry("自定义课程","添加与管理",8,()->showCustomCourses()),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams spacer=new LinearLayout.LayoutParams(0,-2,1);spacer.leftMargin=dp(12);top.addView(homeEntry("成绩查看","按学期查看",11,()->openGrades()),spacer);content.addView(top);
         space(content,12);
         LinearLayout campus=row();campus.addView(homeEntry("校园地图","探索校园",13,()->openCampusMap()),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams calendarSpace=new LinearLayout.LayoutParams(0,-2,1);calendarSpace.leftMargin=dp(12);campus.addView(homeEntry("校历","2026—2027 学年",14,()->startActivity(new Intent(this,AcademicCalendarActivity.class))),calendarSpace);content.addView(campus);
-        space(content,12);LinearLayout services=row();services.addView(homeEntry("网上报修","校园后勤服务",15,()->openIdentity(true)),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams electricitySpace=new LinearLayout.LayoutParams(0,-2,1);electricitySpace.leftMargin=dp(12);services.addView(homeEntry("用电缴费","校园用电服务",17,()->openElectricity()),electricitySpace);content.addView(services);return content;
+        space(content,12);LinearLayout services=row();services.addView(homeEntry("网上报修","校园后勤服务",15,()->openIdentity(true)),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams electricitySpace=new LinearLayout.LayoutParams(0,-2,1);electricitySpace.leftMargin=dp(12);services.addView(homeEntry("用电缴费","校园用电服务",17,()->openElectricity()),electricitySpace);content.addView(services);
+        space(content,12);LinearLayout labs=row();labs.addView(homeEntry("大物实验报告","需连接校园网",18,()->openPhysicsLab()),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams labSpace=new LinearLayout.LayoutParams(0,1,1);labSpace.leftMargin=dp(12);labs.addView(new View(this),labSpace);content.addView(labs);return content;
     }
     void openCampusMap(){
         startActivity(new Intent(this,CampusMapActivity.class));
+    }
+    void openPhysicsLab(){
+        startActivity(new Intent(this,PhysicsLabActivity.class));
     }
     View homeEntry(String title,String subtitle,int iconId,Runnable action){
         LinearLayout entry=column();entry.setPadding(dp(16),dp(14),dp(16),dp(14));entry.setMinimumHeight(dp(112));entry.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),shape(palette.entrySurface,20),shape(palette.rippleMask,20)));

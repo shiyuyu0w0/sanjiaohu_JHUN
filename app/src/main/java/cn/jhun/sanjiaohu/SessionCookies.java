@@ -6,7 +6,7 @@ import java.util.*;
 /** Remove each site's cookies, preserving the other account's host and path scopes. */
 final class SessionCookies {
     static void teaching(Runnable done){clear(new String[]{"jwxt.jhun.edu.cn"},new String[]{"/","/cas","/cas/","/frame","/frame/"},done);}
-    static void identity(Runnable done){clear(new String[]{"authserver.jhun.edu.cn","ehall.jhun.edu.cn","hqfw.jhun.edu.cn","hub.17wanxiao.com","open.17wanxiao.com"},new String[]{"/","/authserver","/authserver/","/new","/new/","/wsbx","/wsbx/","/wsbx/html/yd","/wsbx/html/yd/","/bsacs","/bsacs/"},()->clear(new String[]{"h5cloud.17wanxiao.com:18443"},new String[]{"/","/CloudPayment","/CloudPayment/","/CloudPayment/bill","/CloudPayment/bill/","/CloudPayment/bill/type.do"},done));}
+    static void identity(Runnable done){clear(new String[]{"authserver.jhun.edu.cn","ehall.jhun.edu.cn","hqfw.jhun.edu.cn","hub.17wanxiao.com","open.17wanxiao.com","wapnew.17wanxiao.com"},new String[]{"/","/authserver","/authserver/","/new","/new/","/wsbx","/wsbx/","/wsbx/html/yd","/wsbx/html/yd/","/bsacs","/bsacs/"},()->clear(new String[]{"h5cloud.17wanxiao.com:18443"},new String[]{"/","/CloudPayment","/CloudPayment/","/CloudPayment/bill","/CloudPayment/bill/","/CloudPayment/bill/type.do"},done));}
     private static void clear(String[] authorities,String[] paths,Runnable done){
         CookieManager jar=CookieManager.getInstance();List<String[]> removals=new ArrayList<>();
         for(String authority:authorities){String host=java.net.URI.create("https://"+authority).getHost();android.webkit.WebStorage.getInstance().deleteOrigin("https://"+authority);android.webkit.WebStorage.getInstance().deleteOrigin("http://"+authority);Set<String> names=new HashSet<>();

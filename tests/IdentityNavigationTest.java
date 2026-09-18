@@ -52,6 +52,11 @@ public final class IdentityNavigationTest {
             check(IdentityPolicy.allowed(url));check(n.visit(url,1));
         }
         check(IdentityPolicy.electricity(cloud));check(n.finishOnce());check(!n.finishOnce());
+        // Continue from the authenticated bill page to payment and back in the same flow.
+        n.userGesture(2);
+        String payment="https://wapnew.17wanxiao.com/?order=synthetic";
+        check(IdentityPolicy.allowed(payment));check(IdentityPolicy.electricity(payment));check(n.visit(payment,3));
+        check(n.visit(cloud,4));check(n.completed);check(!n.finishOnce());check(!n.stopped);
         check(!IdentityNavigation.key(cloud).equals(IdentityNavigation.key(cloud.replace(":18443",":443"))));
         check(IdentityNavigation.key(cloud+"?ticket=ST-synthetic").equals(IdentityNavigation.key(cloud)));
         String raw=cloud+"?data={test}";

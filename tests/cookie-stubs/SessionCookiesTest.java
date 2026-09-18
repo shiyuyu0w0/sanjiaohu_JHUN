@@ -15,6 +15,8 @@ public final class SessionCookiesTest {
         for(String write:CookieManager.INSTANCE.writes){if(write.contains("Domain=h5cloud.17wanxiao.com:18443")||write.contains("Domain=.h5cloud.17wanxiao.com:18443"))throw new AssertionError("Cookie Domain incorrectly includes port");checks++;}
         if(!WebStorage.INSTANCE.deleted.contains("https://open.17wanxiao.com"))throw new AssertionError("Electricity relay storage retained");checks++;
         if(CookieManager.INSTANCE.writes.stream().noneMatch(s->s.startsWith("https://open.17wanxiao.com/")&&s.contains("Max-Age=0")))throw new AssertionError("Electricity relay session retained");checks++;
+        if(!WebStorage.INSTANCE.deleted.contains("https://wapnew.17wanxiao.com"))throw new AssertionError("Payment storage retained");checks++;
+        if(CookieManager.INSTANCE.writes.stream().noneMatch(s->s.startsWith("https://wapnew.17wanxiao.com/")&&s.contains("Max-Age=0")))throw new AssertionError("Payment session retained");checks++;
         System.out.println("Session cleanup scopes: "+checks+" fixture checks passed");
     }
 }

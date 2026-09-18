@@ -17,6 +17,9 @@ public final class IdentityDiagnosticsTest {
             "https://h5cloud.17wanxiao.com:18443/CloudPayment/bill/type.do?data={\"token\":\"SECRET\"}#SECRET",
             "https://intermediate.17wanxiao.com:18443/SECRET?data={\"token\":\"SECRET\"}",
             "intent://SECRET/path?token=SECRET#Intent;scheme=SECRET;end",
+            "https://mclient.alipay.com/h5pay/h5RouteAppSenior/index.html?contextId=SECRET&cookieToken=SECRET&server_param=SECRET#SECRET",
+            "alipays://platformapi/startapp?appId=SECRET&url=SECRET",
+            "alipay://platformapi/startapp?order=SECRET",
             "https://authserver.jhun.edu.cn/authserver/SECRET?secret=SECRET",
             "https://SECRET.example/SECRET?SECRET=SECRET",
             "https://SECRET:SECRET@authserver.jhun.edu.cn/authserver/login",
@@ -31,6 +34,8 @@ public final class IdentityDiagnosticsTest {
         check(IdentityDiagnostics.route("https://intermediate.17wanxiao.com:18443/SECRET?token=SECRET").equals("https://intermediate.17wanxiao.com:18443/[其他路径]"));
         check(!IdentityPolicy.allowed("https://intermediate.17wanxiao.com:18443/"));
         check(IdentityDiagnostics.route("intent://SECRET/path#SECRET").equals("[外部应用协议：intent]"));
+        check(IdentityDiagnostics.route("https://mclient.alipay.com/h5pay/h5RouteAppSenior/index.html?cookieToken=SECRET").equals("https://mclient.alipay.com/h5pay/h5RouteAppSenior/index.html"));
+        trace.add(IdentityDiagnostics.Event.ALIPAY_OPEN,"alipays://platformapi/startapp?order=SECRET",0);check(!trace.report().contains("SECRET"));
         trace.add(IdentityDiagnostics.Event.BLOCKED_MAIN,"https://intermediate.17wanxiao.com:18443/SECRET?data={SECRET}",0);
         check(trace.report().contains("BLOCKED_MAIN https://intermediate.17wanxiao.com:18443/[其他路径]"));check(!trace.report().contains("SECRET"));
         for(int i=0;i<50;i++)trace.add(IdentityDiagnostics.Event.ERROR,IdentityPolicy.LOGIN,i);

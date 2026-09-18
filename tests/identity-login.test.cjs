@@ -77,9 +77,10 @@ const cloudPayment='https://h5cloud.17wanxiao.com:18443/CloudPayment/bill/type.d
 for(const opts of [{url:cloudPayment,action:cloudPayment},{url:electricityLogin,action:cloudPayment},{url:'http://authserver.jhun.edu.cn/authserver/login?service='+encodeURIComponent(cloudPayment),action:electricityLogin}]){
  const r=run(opts);check(()=>assert.equal(r.result.state,'unsupported'));check(()=>assert.equal(r.clicks,0));check(()=>assert.equal(r.pass.value,''));
 }
-const electricityRelay='https://open.17wanxiao.com/';
+for(const electricityRelay of ['https://open.17wanxiao.com/','https://wapnew.17wanxiao.com/','https://mclient.alipay.com/h5pay/h5RouteAppSenior/index.html']){
 for(const opts of [{url:electricityRelay,action:electricityRelay},{url:electricityLogin,action:electricityRelay},{url:'http://authserver.jhun.edu.cn/authserver/login?service='+encodeURIComponent(electricityRelay),action:electricityLogin}]){
  const r=run(opts);check(()=>assert.equal(r.result.state,'unsupported'));check(()=>assert.equal(r.clicks,0));check(()=>assert.equal(r.pass.value,''));
+}
 }
 const inspect=run({inspect:true,captcha:true});check(()=>assert.equal(inspect.result.captcha,true));check(()=>assert.equal(inspect.clicks,0));check(()=>assert.equal(inspect.pass.value,''));
 console.log('Identity login adapter: '+checks+' checks passed (synthetic credentials; observed school form structure).');

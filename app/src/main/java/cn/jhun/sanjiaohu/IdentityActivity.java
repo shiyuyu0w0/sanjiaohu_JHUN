@@ -33,6 +33,7 @@ public final class IdentityActivity extends Activity {
     final ExecutorService vault=Executors.newSingleThreadExecutor();
     final IdentityNavigation navigation=new IdentityNavigation();
     final IdentityDiagnostics diagnostics=new IdentityDiagnostics();
+    long lastAlipayLaunch;
     String adapter,documentProbe,lastDocument="",lastUrl="",pendingAccount,pendingPassword;
     boolean documentReady;
     int documentEpoch;
@@ -99,7 +100,10 @@ public final class IdentityActivity extends Activity {
                 if(!electricity&&request.isForMainFrame()&&"GET".equals(request.getMethod())&&IdentityPolicy.repairRoot(url)){view.loadUrl(IdentityPolicy.REPAIR);return true;}
                 // Follow the school's real redirect without issuing another loadUrl.
                 // Android cleartext permission is scoped to the exact school hosts.
-                if(IdentityPolicy.allowed(url)){if(request.isForMainFrame()){observeTicket(url);if(IdentityPolicy.parse(url).getHost()==null)diagnostics.add(IdentityDiagnostics.Event.LENIENT_URL,url,0);}return false;}
+                if(IdentityPolicy.allowed(url)||(electricity&&PaymentNavigation.alipayWeb(url))){if(request.isForMainFrame()){observeTicket(url);if(IdentityPolicy.parse(url).getHost()==null)diagnostics.add(IdentityDiagnostics.Event.LENIENT_URL,url,0);}return false;}
+                if(PaymentNavigation.sourceAllowed(electricity,lastUrl,request.isForMainFrame(),request.getMethod())){
+                    String link=PaymentNavigation.alipayLink(url);if(link!=null){openAlipay(link);return true;}
+                }
                 diagnostics.add(request.isForMainFrame()?IdentityDiagnostics.Event.BLOCKED_MAIN:IdentityDiagnostics.Event.BLOCKED_FRAME,url,0);
                 if(request.isForMainFrame())networkError("学校跳转到了暂不支持的地址："+IdentityDiagnostics.route(url)+"。请复制连接诊断以便排查。");return true;
             }
@@ -120,6 +124,7 @@ public final class IdentityActivity extends Activity {
                 if(repair&&IdentityPolicy.desktopRepair(url)){showWeb();view.loadUrl(IdentityPolicy.REPAIR);return;}
                 if(IdentityPolicy.auth(url)){prepareSchoolForm();if(!attempting&&!manualPage){showForm();inspect();if((repair||electricity)&&!autoTried)tryAutomatic();}}
                 else if(electricity&&IdentityPolicy.electricity(url)){showWeb();if(ticketSeen)complete();}
+                else if(electricity&&PaymentNavigation.alipayWeb(url)){showWeb();}
                 else if(!electricity&&ticketSeen&&(IdentityPolicy.hall(url)||IdentityPolicy.repairLanding(url))){complete();}
                 else if(!electricity&&IdentityPolicy.hall(url)){verifyHall(0);}
                 else if(!IdentityPolicy.auth(url)&&manualPage){showWeb();}
@@ -149,6 +154,15 @@ public final class IdentityActivity extends Activity {
     void observeTicket(String url){if(IdentityPolicy.auth(lastUrl)&&IdentityPolicy.allowed(url)&&!IdentityPolicy.auth(url)){String ticket=Uri.parse(url).getQueryParameter("ticket");if(ticket!=null&&ticket.startsWith("ST-"))ticketSeen=true;}}
     boolean currentDocument(String url){return web!=null&&url!=null&&web.getUrl()!=null&&url.split("#",2)[0].equals(web.getUrl().split("#",2)[0]);}
     void startPage(String url){documentReady=false;documentEpoch++;diagnostics.add(IdentityDiagnostics.Event.RETRY,url,0);navigation.begin(SystemClock.elapsedRealtime());ticketSeen=false;failed=false;loaded=false;lastUrl="";if(web==null)createWeb();web.stopLoading();web.loadUrl(url);}
+    void openAlipay(String link){
+        long now=SystemClock.elapsedRealtime();if(lastAlipayLaunch>0&&now-lastAlipayLaunch<2000)return;
+        lastAlipayLaunch=now;handler.removeCallbacks(pageTimeout);progress.setVisibility(View.INVISIBLE);showWeb();
+        // Construct a fresh intent, fixed to Alipay. Never launch a webpage's raw Intent.
+        Intent intent=new Intent(Intent.ACTION_VIEW,Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(PaymentNavigation.ALIPAY_PACKAGE);
+        try{startActivity(intent);diagnostics.add(IdentityDiagnostics.Event.ALIPAY_OPEN,link,0);subtitle.setText("已打开支付宝，请在支付宝内确认付款");}
+        catch(ActivityNotFoundException e){diagnostics.add(IdentityDiagnostics.Event.ALIPAY_UNAVAILABLE,link,0);subtitle.setText("未找到支付宝，可继续使用网页支付");Toast.makeText(this,"未找到可用的支付宝，请安装支付宝或在页面选择其他支付方式。",Toast.LENGTH_LONG).show();}
+        catch(SecurityException e){diagnostics.add(IdentityDiagnostics.Event.ALIPAY_UNAVAILABLE,link,1);subtitle.setText("系统未允许打开支付宝");Toast.makeText(this,"系统未允许打开支付宝，请检查手机设置或使用网页支付。",Toast.LENGTH_LONG).show();}
+    }
     void verifyHall(int retries){
         if(web==null||!IdentityPolicy.hall(web.getUrl()))return;int id=generation;
         // Some WebView versions omit intermediate redirect callbacks. Require a

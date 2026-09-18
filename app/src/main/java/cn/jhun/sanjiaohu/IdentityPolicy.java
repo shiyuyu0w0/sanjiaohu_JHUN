@@ -36,7 +36,8 @@ final class IdentityPolicy {
     static boolean repairRoot(String value){return repair(value)&&("/wsbx/".equals(parse(value).getPath())||"/wsbx".equals(parse(value).getPath()));}
     // CloudPayment is the post-CAS destination, not the credential form or CAS service.
     static boolean cloudPayment(String value){URI u=navigationUri(value);return u.getRawUserInfo()==null&&"https".equalsIgnoreCase(u.getScheme())&&"h5cloud.17wanxiao.com".equalsIgnoreCase(u.getHost())&&u.getPort()==18443;}
-    // Phone diagnostics confirm this HTTPS hop after hub, before the bill page.
-    static boolean electricityRelay(String value){URI u=navigationUri(value);return u.getRawUserInfo()==null&&"https".equalsIgnoreCase(u.getScheme())&&"open.17wanxiao.com".equalsIgnoreCase(u.getHost())&&(u.getPort()==-1||u.getPort()==443);}
+    // Phone diagnostics confirm open for authorization and wapnew after the bill page.
+    // These are navigation destinations only, never native credential/CAS targets.
+    static boolean electricityRelay(String value){URI u=navigationUri(value);return u.getRawUserInfo()==null&&"https".equalsIgnoreCase(u.getScheme())&&("open.17wanxiao.com".equalsIgnoreCase(u.getHost())||"wapnew.17wanxiao.com".equalsIgnoreCase(u.getHost()))&&(u.getPort()==-1||u.getPort()==443);}
     static boolean electricity(String value){return cloudPayment(value)||electricityRelay(value)||(allowed(value)&&"hub.17wanxiao.com".equalsIgnoreCase(navigationUri(value).getHost()));}
 }
