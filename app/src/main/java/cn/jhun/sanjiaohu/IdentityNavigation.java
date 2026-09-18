@@ -12,15 +12,16 @@ final class IdentityNavigation {
     boolean stopped,completed;
     void begin(long now){visits.clear();total=0;started=now;stopped=false;completed=false;}
     static String key(String url){
-        URI uri=IdentityPolicy.parse(url);java.util.List<String> parameters=new java.util.ArrayList<>();
-        if(uri.getRawQuery()!=null)for(String pair:uri.getRawQuery().split("&")){
+        URI uri=IdentityPolicy.navigationUri(url);java.util.List<String> parameters=new java.util.ArrayList<>();
+        String withoutFragment=url==null?"":url.split("#",2)[0];int queryAt=withoutFragment.indexOf('?');
+        if(queryAt>=0)for(String pair:withoutFragment.substring(queryAt+1).split("&")){
             String name=pair.split("=",2)[0];
             try{name=java.net.URLDecoder.decode(name,"UTF-8");}catch(Exception ignored){}
             if(!name.equals("ticket")&&!name.equals("nonce")&&!name.equals("timestamp")&&!name.equals("_"))parameters.add(pair);
         }
         java.util.Collections.sort(parameters);
         // service and execution distinguish normal CAS steps on the same servlet.
-        return String.valueOf(uri.getScheme())+"://"+uri.getHost()+uri.getRawPath()+"?"+String.join("&",parameters);
+        return String.valueOf(uri.getScheme())+"://"+uri.getHost()+(uri.getPort()==-1?"":":"+uri.getPort())+uri.getRawPath()+"?"+String.join("&",parameters);
     }
     boolean visit(String url,long now){
         if(stopped)return false;

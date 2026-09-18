@@ -2,7 +2,7 @@
   // Use the school's own submit handler (including any password encryption).
   function loginPath(path){return /^\/authserver\/login(?:;jsessionid=[A-Za-z0-9._-]+)?$/.test(path);}
   if(!/^https?:\/\/authserver\.jhun\.edu\.cn$/.test(location.origin)||!loginPath(location.pathname))return {state:'unsupported',error:'当前页面不是学校的统一认证登录页，请重新加载。'};
-  function serviceAllowed(url,depth){if(depth>4)return false;var values=url.searchParams.getAll('service');return values.every(function(value){try{var next=new URL(value);return /^(https?:)$/.test(next.protocol)&&/^(ehall|hqfw)\.jhun\.edu\.cn$/.test(next.hostname)&&!next.username&&!next.password&&!next.port&&serviceAllowed(next,depth+1);}catch(e){return false;}});}
+  function serviceAllowed(url,depth){if(depth>4)return false;var values=url.searchParams.getAll('service');return values.every(function(value){try{var next=new URL(value);var school=/^(https?:)$/.test(next.protocol)&&/^(ehall|hqfw)\.jhun\.edu\.cn$/.test(next.hostname);var electricity=next.protocol==='https:'&&next.hostname==='hub.17wanxiao.com';return (school||electricity)&&!next.username&&!next.password&&!next.port&&serviceAllowed(next,depth+1);}catch(e){return false;}});}
   if(!serviceAllowed(new URL(location.href),0))return {state:'unsupported'};
   // DOM parsing must finish, but images and unrelated resources may still be loading.
   if(document.readyState==='loading')return {state:'waiting'};

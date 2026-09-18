@@ -36,7 +36,7 @@ public final class IdentityActivity extends Activity {
     String adapter,documentProbe,lastDocument="",lastUrl="",pendingAccount,pendingPassword;
     boolean documentReady;
     int documentEpoch;
-    boolean repair,loaded,attempting,submitted,saving,failed,autoTried,ticketSeen,manualPage,clearing;
+    boolean repair,electricity,loaded,attempting,submitted,saving,failed,autoTried,ticketSeen,manualPage,clearing;
     final Runnable pageTimeout=()->{if(!loaded&&!navigation.stopped&&!isDestroyed())networkError("学校页面加载超时，已停止加载。请点击重新加载后再试。");};
     long deadline,submittedAt;
     int generation;
@@ -45,7 +45,8 @@ public final class IdentityActivity extends Activity {
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
-        repair=getIntent().getBooleanExtra("repair",false);
+        electricity=getIntent().getBooleanExtra("electricity",false);
+        repair=!electricity&&getIntent().getBooleanExtra("repair",false);
         prefs=getSharedPreferences("identity",MODE_PRIVATE);
         theme=AppTheme.from(this,getSharedPreferences("settings",MODE_PRIVATE).getInt("themeColor",0xff2ecbff));
         try(InputStream in=getAssets().open("identity-login.js");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] bytes=new byte[4096];int n;while((n=in.read(bytes))!=-1)out.write(bytes,0,n);adapter=out.toString("UTF-8");}catch(IOException e){finish();return;}
@@ -53,12 +54,13 @@ public final class IdentityActivity extends Activity {
         AppTheme.applySystemBars(this,theme);
         LinearLayout root=column();root.setBackgroundColor(theme.surface);root.setOnApplyWindowInsetsListener((v,i)->{v.setPadding(i.getSystemWindowInsetLeft(),i.getSystemWindowInsetTop(),i.getSystemWindowInsetRight(),i.getSystemWindowInsetBottom());return i.consumeSystemWindowInsets();});
         LinearLayout header=row();header.setPadding(dp(18),dp(10),dp(18),dp(10));header.addView(action("‹",false,()->back()),new LinearLayout.LayoutParams(dp(44),dp(44)));header.getChildAt(0).setContentDescription("返回");
-        LinearLayout titles=column();titles.setPadding(dp(14),0,dp(8),0);titles.addView(text(repair?"网上报修":"统一身份认证",20,theme.text,true));subtitle=text("江汉大学 · 校园服务",11,theme.muted,false);titles.addView(subtitle);header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout titles=column();titles.setPadding(dp(14),0,dp(8),0);titles.addView(text(electricity?"用电缴费":repair?"网上报修":"统一身份认证",20,theme.text,true));subtitle=text("江汉大学 · 校园服务",11,theme.muted,false);titles.addView(subtitle);header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
         TextView manage=action("账号",false,()->manualLogin());header.addView(manage,new LinearLayout.LayoutParams(dp(52),dp(44)));TextView refresh=action("↻",false,()->reload());refresh.setContentDescription("重新加载");LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(dp(44),dp(44));rp.leftMargin=dp(8);header.addView(refresh,rp);root.addView(header);
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(100);progress.setProgressTintList(ColorStateList.valueOf(theme.primary));root.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
         body=new FrameLayout(this);root.addView(body,new LinearLayout.LayoutParams(-1,0,1));buildForm();buildError();createWeb();setContentView(root);
-        if(repair){showWeb();startPage(IdentityPolicy.REPAIR_ENTRY);}else prepareLogin(false);
+        if(repair||electricity){showWeb();startPage(loginEntry());}else prepareLogin(false);
     }
+    String loginEntry(){return electricity?IdentityPolicy.ELECTRICITY_LOGIN:IdentityPolicy.LOGIN;}
     void buildForm(){
         form=new ScrollView(this);form.setFillViewport(true);form.setBackgroundColor(theme.surface);form.setVerticalScrollBarEnabled(false);
         LinearLayout content=column();content.setPadding(dp(26),dp(22),dp(26),dp(24));form.addView(content);
@@ -94,30 +96,32 @@ public final class IdentityActivity extends Activity {
                 if(request.isForMainFrame())diagnostics.add("GET".equals(request.getMethod())?IdentityDiagnostics.Event.GET:"POST".equals(request.getMethod())?IdentityDiagnostics.Event.POST:IdentityDiagnostics.Event.OTHER_METHOD,url,request.isRedirect()?1:0);
                 // The direct CAS callback redirects to /wsbx/#/wybx, a directory returning 403.
                 // Open the actual mobile HTML entry after that callback, preserving its cookies.
-                if(request.isForMainFrame()&&"GET".equals(request.getMethod())&&IdentityPolicy.repairRoot(url)){view.loadUrl(IdentityPolicy.REPAIR);return true;}
+                if(!electricity&&request.isForMainFrame()&&"GET".equals(request.getMethod())&&IdentityPolicy.repairRoot(url)){view.loadUrl(IdentityPolicy.REPAIR);return true;}
                 // Follow the school's real redirect without issuing another loadUrl.
                 // Android cleartext permission is scoped to the exact school hosts.
-                if(IdentityPolicy.allowed(url)){if(request.isForMainFrame())observeTicket(url);return false;}
-                if(request.isForMainFrame())networkError("学校跳转到了暂不支持的地址，已停止加载。");return true;
+                if(IdentityPolicy.allowed(url)){if(request.isForMainFrame()){observeTicket(url);if(IdentityPolicy.parse(url).getHost()==null)diagnostics.add(IdentityDiagnostics.Event.LENIENT_URL,url,0);}return false;}
+                diagnostics.add(request.isForMainFrame()?IdentityDiagnostics.Event.BLOCKED_MAIN:IdentityDiagnostics.Event.BLOCKED_FRAME,url,0);
+                if(request.isForMainFrame())networkError("学校跳转到了暂不支持的地址："+IdentityDiagnostics.route(url)+"。请复制连接诊断以便排查。");return true;
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
                 documentReady=false;documentEpoch++;diagnostics.add(IdentityDiagnostics.Event.START,url,0);
                 if(!navigation.visit(url,SystemClock.elapsedRealtime())){networkError("学校页面出现重复跳转，已停止循环加载。请重新加载或返回后重试。");return;}
                 // Observe a fresh CAS ticket only when it is redirected from the real IdP.
                 observeTicket(url);
-                if(IdentityPolicy.repairRoot(url)){view.loadUrl(IdentityPolicy.REPAIR);return;}
+                if(!electricity&&IdentityPolicy.repairRoot(url)){view.loadUrl(IdentityPolicy.REPAIR);return;}
                 lastUrl=url;loaded=false;failed=false;errorPanel.setVisibility(View.GONE);progress.setVisibility(View.VISIBLE);subtitle.setText("正在连接校园服务…");
                 handler.removeCallbacks(pageTimeout);handler.postDelayed(pageTimeout,45000);
                 if(IdentityPolicy.auth(url)&&!manualPage)showForm();
             }
             @Override public void onPageFinished(WebView view,String url){
-                if(failed||navigation.stopped||isFinishing()||!currentDocument(url))return;loaded=true;handler.removeCallbacks(pageTimeout);progress.setVisibility(View.INVISIBLE);subtitle.setText(repair?"校园后勤服务":"独立管理校园服务账号");
+                if(failed||navigation.stopped||isFinishing()||!currentDocument(url))return;loaded=true;handler.removeCallbacks(pageTimeout);progress.setVisibility(View.INVISIBLE);subtitle.setText(electricity?"校园用电服务":repair?"校园后勤服务":"独立管理校园服务账号");
                 documentReady=true;diagnostics.add(IdentityDiagnostics.Event.FINISH,url,0);probeDocument();
                 // Let the school's desktop landing finish consuming its SSO session first.
                 if(repair&&IdentityPolicy.desktopRepair(url)){showWeb();view.loadUrl(IdentityPolicy.REPAIR);return;}
-                if(IdentityPolicy.auth(url)){prepareSchoolForm();if(!attempting&&!manualPage){showForm();inspect();if(repair&&!autoTried)tryAutomatic();}}
-                else if(ticketSeen&&(IdentityPolicy.hall(url)||IdentityPolicy.repairLanding(url))){complete();}
-                else if(IdentityPolicy.hall(url)){verifyHall(0);}
+                if(IdentityPolicy.auth(url)){prepareSchoolForm();if(!attempting&&!manualPage){showForm();inspect();if((repair||electricity)&&!autoTried)tryAutomatic();}}
+                else if(electricity&&IdentityPolicy.electricity(url)){showWeb();if(ticketSeen)complete();}
+                else if(!electricity&&ticketSeen&&(IdentityPolicy.hall(url)||IdentityPolicy.repairLanding(url))){complete();}
+                else if(!electricity&&IdentityPolicy.hall(url)){verifyHall(0);}
                 else if(!IdentityPolicy.auth(url)&&manualPage){showWeb();}
             }
             @Override public void onPageCommitVisible(WebView view,String url){if(!navigation.stopped&&currentDocument(url)){documentReady=true;diagnostics.add(IdentityDiagnostics.Event.COMMIT,url,0);probeDocument();if(IdentityPolicy.auth(url))prepareSchoolForm();}}
@@ -133,7 +137,7 @@ public final class IdentityActivity extends Activity {
         web.evaluateJavascript(documentProbe,value->{if(isDestroyed()||epoch!=documentEpoch)return;try{JSONObject state=new JSONObject(value);String origin=state.optString("originKind");if(!origin.equals("https-auth")&&!origin.equals("http-auth"))origin="other";String ready=state.optString("ready");if(!ready.equals("complete")&&!ready.equals("interactive"))ready="loading";lastDocument="页面来源="+origin+"，DOM="+ready+"，登录路径="+state.optBoolean("login")+"，登录表单="+state.optBoolean("form");diagnostics.add(IdentityDiagnostics.Event.DOCUMENT,address,state.optBoolean("login")&&state.optBoolean("form")?(origin.equals("https-auth")?1:origin.equals("http-auth")?2:0):0);}catch(Exception ignored){lastDocument="无法读取页面状态";}});
     }
     String diagnosticsReport(){
-        String version="未知";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
+        String version="未知";try{android.content.pm.PackageInfo info=getPackageManager().getPackageInfo(getPackageName(),0);version=info.versionName+" ("+info.versionCode+")";}catch(Exception ignored){}
         android.content.pm.PackageInfo engine=WebView.getCurrentWebViewPackage();
         return "三角狐 "+version+" · Android API "+Build.VERSION.SDK_INT+"\nWebView "+(engine==null?"未知":engine.versionName)+"\n浏览器模式：移动浏览器兼容\n"+lastDocument+"\n\n"+diagnostics.report();
     }
@@ -156,7 +160,7 @@ public final class IdentityActivity extends Activity {
     void manualLogin(){prepareLogin(true);}
     void prepareLogin(boolean switchAccount){
         if(saving||clearing)return;cancelAttempt();manualPage=false;autoTried=true;ticketSeen=false;clearing=true;showForm();submit.setEnabled(false);status.setText("正在准备统一身份认证…");if(web==null)createWeb();web.stopLoading();
-        Runnable open=()->{if(isDestroyed())return;clearing=false;submit.setEnabled(true);startPage(IdentityPolicy.LOGIN);};
+        Runnable open=()->{if(isDestroyed())return;clearing=false;submit.setEnabled(true);startPage(loginEntry());};
         if(switchAccount){prefs.edit().putBoolean("completed",false).apply();SessionCookies.identity(open);}else open.run();
         if(IdentityCredentialStore.exists(this))vault.execute(()->{try{IdentityCredentialStore.Credentials saved=IdentityCredentialStore.load(this);handler.post(()->{if(!isDestroyed()&&account.getText().length()==0){account.setText(saved.account);password.setText(saved.password);}});}catch(Exception ignored){}});
     }
@@ -172,7 +176,7 @@ public final class IdentityActivity extends Activity {
         navigation.begin(SystemClock.elapsedRealtime());showForm();submit.setText("正在连接学校…");status.setText(automatic?"正在自动登录统一身份认证…":"正在连接学校登录表单…");
         android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(keyboard!=null)keyboard.hideSoftInputFromWindow(password.getWindowToken(),0);
         // A retry must not destroy the CAS form's session or wait on thousands of cookie callbacks.
-        if(retryPage||!IdentityPolicy.auth(web.getUrl()))startPage(IdentityPolicy.LOGIN);
+        if(retryPage||!IdentityPolicy.auth(web.getUrl()))startPage(loginEntry());
         poll(id);
     }
     void poll(int id){
@@ -209,7 +213,7 @@ public final class IdentityActivity extends Activity {
     void cancelAttempt(){generation++;attempting=false;submitted=false;pendingPassword=null;pendingAccount=null;setInputs(true);}
     void setInputs(boolean enabled){account.setEnabled(enabled);password.setEnabled(enabled);remember.setEnabled(enabled);submit.setEnabled(enabled&&!clearing);if(enabled)submit.setText("登录");}
     void officialPage(){
-        if(clearing||saving)return;cancelAttempt();manualPage=true;ticketSeen=false;showWeb();if(web==null)createWeb();if(navigation.stopped||!IdentityPolicy.auth(web.getUrl()))startPage(IdentityPolicy.LOGIN);
+        if(clearing||saving)return;cancelAttempt();manualPage=true;ticketSeen=false;showWeb();if(web==null)createWeb();if(navigation.stopped||!IdentityPolicy.auth(web.getUrl()))startPage(loginEntry());
         Toast.makeText(this,"在学校页面亲自完成验证；网页中输入的密码不会被应用读取或保存",Toast.LENGTH_LONG).show();
     }
     void complete(){
@@ -221,12 +225,12 @@ public final class IdentityActivity extends Activity {
             boolean stored=preserve;try{if(keep){IdentityCredentialStore.save(this,user,secret);stored=true;}else if(!preserve){IdentityCredentialStore.clear(this);}}catch(Exception e){stored=false;IdentityCredentialStore.clear(this);}
             prefs.edit().putBoolean("completed",true).putBoolean("blocked",false).putBoolean("autoLogin",stored&&(keep||previousAuto)).putLong("lastAuthAt",System.currentTimeMillis()).apply();final boolean didStore=stored;
             handler.post(()->{if(isDestroyed())return;saving=false;setInputs(true);if(keep&&!didStore)Toast.makeText(this,"认证成功，但凭证保存失败，下次需要手动登录",Toast.LENGTH_LONG).show();
-                if(repair){manualPage=false;showWeb();if(!IdentityPolicy.repairLanding(web.getUrl()))web.loadUrl(IdentityPolicy.REPAIR);}else{Toast.makeText(this,didStore?"统一认证登录成功，凭证已单独加密保存":"统一认证登录成功",Toast.LENGTH_SHORT).show();finish();}
+                if(electricity){manualPage=false;showWeb();}else if(repair){manualPage=false;showWeb();if(!IdentityPolicy.repairLanding(web.getUrl()))web.loadUrl(IdentityPolicy.REPAIR);}else{Toast.makeText(this,didStore?"统一认证登录成功，凭证已单独加密保存":"统一认证登录成功",Toast.LENGTH_SHORT).show();finish();}
             });
         });
     }
     void networkError(String message){documentReady=false;documentEpoch++;probeDocument();navigation.stop();handler.removeCallbacks(pageTimeout);loaded=false;failed=true;ticketSeen=false;cancelAttempt();if(web!=null)web.stopLoading();progress.setVisibility(View.INVISIBLE);subtitle.setText("连接未完成");if(form.getVisibility()==View.VISIBLE){status.setText(message);}else{errorText.setText(message);errorPanel.setVisibility(View.VISIBLE);}}
-    void reload(){if(clearing||saving)return;cancelAttempt();errorPanel.setVisibility(View.GONE);if(form.getVisibility()==View.VISIBLE){status.setText("正在重新连接学校…");startPage(IdentityPolicy.LOGIN);}else startPage(repair?IdentityPolicy.REPAIR_ENTRY:IdentityPolicy.LOGIN);}
+    void reload(){if(clearing||saving)return;cancelAttempt();errorPanel.setVisibility(View.GONE);if(form.getVisibility()==View.VISIBLE)status.setText("正在重新连接学校…");startPage(loginEntry());}
     void showForm(){form.setVisibility(View.VISIBLE);errorPanel.setVisibility(View.GONE);if(web!=null)web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);}
     void showWeb(){form.setVisibility(View.GONE);errorPanel.setVisibility(View.GONE);if(web!=null)web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}
     void back(){if(saving)return;if(!navigation.stopped&&form.getVisibility()!=View.VISIBLE&&web!=null&&web.canGoBack()){cancelAttempt();navigation.begin(SystemClock.elapsedRealtime());web.goBack();}else finish();}

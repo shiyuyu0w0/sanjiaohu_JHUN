@@ -62,6 +62,7 @@ public final class MoreMenu {
             if(id==1||id==6){c.drawArc(new RectF(4,4,20,20),id==1?35:45,280,false,pen);Path p=new Path();p.moveTo(4,3);p.lineTo(4,8);p.lineTo(9,8);c.drawPath(p,pen);if(id==6){c.drawLine(12,8,12,13,pen);c.drawLine(12,13,15,14,pen);}}
             else if(id==2){Path p=new Path();p.moveTo(3,11);p.lineTo(12,3);p.lineTo(21,11);p.moveTo(6,10);p.lineTo(6,21);p.lineTo(18,21);p.lineTo(18,10);p.moveTo(10,21);p.lineTo(10,15);p.lineTo(14,15);p.lineTo(14,21);c.drawPath(p,pen);}
             else if(id==16){c.drawCircle(12,12,9,pen);c.drawPoint(12,7,pen);c.drawLine(12,11,12,17,pen);}
+            else if(id==17){Path p=new Path();p.moveTo(14,2);p.lineTo(5,14);p.lineTo(11,14);p.lineTo(10,22);p.lineTo(20,10);p.lineTo(13,10);p.close();c.drawPath(p,pen);}
             else if(id==15){Path p=new Path();p.moveTo(14,3);p.cubicTo(9,1,6,6,9,10);p.lineTo(3,17);p.lineTo(7,21);p.lineTo(14,14);p.cubicTo(19,17,23,11,20,7);p.lineTo(17,10);p.lineTo(13,6);p.close();c.drawPath(p,pen);}
             else if(id==13){Path p=new Path();p.moveTo(3,6);p.lineTo(9,3);p.lineTo(15,6);p.lineTo(21,3);p.lineTo(21,18);p.lineTo(15,21);p.lineTo(9,18);p.lineTo(3,21);p.close();p.moveTo(9,3);p.lineTo(9,18);p.moveTo(15,6);p.lineTo(15,21);c.drawPath(p,pen);}
             else if(id==14){c.drawRoundRect(new RectF(3,5,21,21),2,2,pen);c.drawLine(3,10,21,10,pen);c.drawLine(8,3,8,7,pen);c.drawLine(16,3,16,7,pen);for(int x=7;x<=17;x+=5)for(int y=14;y<=18;y+=4)c.drawPoint(x,y,pen);}

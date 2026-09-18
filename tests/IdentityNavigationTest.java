@@ -39,6 +39,27 @@ public final class IdentityNavigationTest {
         check(n.visit(httpLogin,2));check(!n.stopped);
         check(n.visit("http://hqfw.jhun.edu.cn/wsbx/login/cas?ticket=ST-synthetic",3));
         check(n.visit(IdentityPolicy.REPAIR,4));check(n.finishOnce());
+        n.begin(0);
+        check(n.visit(IdentityPolicy.ELECTRICITY_LOGIN,1));
+        check(!IdentityNavigation.key(IdentityPolicy.ELECTRICITY_LOGIN).equals(IdentityNavigation.key(IdentityPolicy.LOGIN)));
+        check(n.visit(IdentityPolicy.ELECTRICITY_SERVICE+"&ticket=ST-synthetic",2));
+        check(n.visit(IdentityPolicy.ELECTRICITY_SERVICE,3));check(n.finishOnce());check(!n.finishOnce());
+        n.stop();check(!n.visit(IdentityPolicy.ELECTRICITY_SERVICE,4));
+        n.begin(5);check(n.visit(IdentityPolicy.ELECTRICITY_LOGIN,6));check(!n.completed);
+        String cloud="https://h5cloud.17wanxiao.com:18443/CloudPayment/bill/type.do";
+        n.begin(0);
+        for(String url:new String[]{IdentityPolicy.ELECTRICITY_LOGIN,IdentityPolicy.ELECTRICITY_SERVICE+"&ticket=ST-synthetic","https://open.17wanxiao.com/?state=synthetic",cloud}){
+            check(IdentityPolicy.allowed(url));check(n.visit(url,1));
+        }
+        check(IdentityPolicy.electricity(cloud));check(n.finishOnce());check(!n.finishOnce());
+        check(!IdentityNavigation.key(cloud).equals(IdentityNavigation.key(cloud.replace(":18443",":443"))));
+        check(IdentityNavigation.key(cloud+"?ticket=ST-synthetic").equals(IdentityNavigation.key(cloud)));
+        String raw=cloud+"?data={test}";
+        check(IdentityNavigation.key(raw).startsWith(cloud));
+        check(!IdentityNavigation.key(raw).equals(IdentityNavigation.key(raw.replace("type.do","next.do"))));
+        check(!IdentityNavigation.key(raw).equals(IdentityNavigation.key(raw.replace("{test}","{other}"))));
+        check(IdentityNavigation.key(raw+"&ticket=ST-one").equals(IdentityNavigation.key(raw+"&ticket=ST-two")));
+        n.begin(0);for(int i=0;i<4;i++)check(n.visit(raw+"&ticket=ST-"+i,i));check(!n.visit(raw+"&ticket=ST-again",5));
         System.out.println("Identity navigation: "+checks+" checks passed");
     }
 }

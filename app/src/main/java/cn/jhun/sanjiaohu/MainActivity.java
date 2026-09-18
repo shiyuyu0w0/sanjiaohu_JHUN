@@ -385,7 +385,7 @@ public class MainActivity extends Activity {
         LinearLayout top=row();top.addView(homeEntry("自定义课程","添加与管理",8,()->showCustomCourses()),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams spacer=new LinearLayout.LayoutParams(0,-2,1);spacer.leftMargin=dp(12);top.addView(homeEntry("成绩查看","按学期查看",11,()->openGrades()),spacer);content.addView(top);
         space(content,12);
         LinearLayout campus=row();campus.addView(homeEntry("校园地图","探索校园",13,()->openCampusMap()),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams calendarSpace=new LinearLayout.LayoutParams(0,-2,1);calendarSpace.leftMargin=dp(12);campus.addView(homeEntry("校历","2026—2027 学年",14,()->startActivity(new Intent(this,AcademicCalendarActivity.class))),calendarSpace);content.addView(campus);
-        space(content,12);LinearLayout services=row();services.addView(homeEntry("网上报修","校园后勤服务",15,()->openIdentity(true)),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams emptySpace=new LinearLayout.LayoutParams(0,1,1);emptySpace.leftMargin=dp(12);services.addView(new View(this),emptySpace);content.addView(services);return content;
+        space(content,12);LinearLayout services=row();services.addView(homeEntry("网上报修","校园后勤服务",15,()->openIdentity(true)),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams electricitySpace=new LinearLayout.LayoutParams(0,-2,1);electricitySpace.leftMargin=dp(12);services.addView(homeEntry("用电缴费","校园用电服务",17,()->openElectricity()),electricitySpace);content.addView(services);return content;
     }
     void openCampusMap(){
         startActivity(new Intent(this,CampusMapActivity.class));
@@ -413,7 +413,7 @@ public class MainActivity extends Activity {
         LinearLayout identity=panel();identity.addView(label("统一身份认证",22,INK,true));space(identity,8);
         android.content.SharedPreferences identityPrefs=getSharedPreferences("identity",MODE_PRIVATE);boolean savedIdentity=IdentityCredentialStore.exists(this);
         identity.addView(label(identityBusy?"正在清除统一认证会话…":identityPrefs.getBoolean("blocked",false)?"需要重新登录或完成学校验证":identityPrefs.getBoolean("completed",false)?"已有登录记录 · 使用时验证会话":savedIdentity?"已保存凭证 · 尚未验证":"未登录",14,INK,true));space(identity,8);
-        identity.addView(label("用于服务大厅、网上报修，与教务账号分别管理。",13,MUTED,false));long identityAt=identityPrefs.getLong("lastAuthAt",0);if(identityAt>0){space(identity,6);identity.addView(label("最近验证 "+stamp(identityAt),12,MUTED,false));}space(identity,18);
+        identity.addView(label("用于服务大厅、网上报修、用电缴费，与教务账号分别管理。",13,MUTED,false));long identityAt=identityPrefs.getLong("lastAuthAt",0);if(identityAt>0){space(identity,6);identity.addView(label("最近验证 "+stamp(identityAt),12,MUTED,false));}space(identity,18);
         identity.addView(themedButton(savedIdentity?"登录 / 管理统一认证账号":"登录统一认证账号",()->openIdentity(false),true),new LinearLayout.LayoutParams(-1,dp(48)));space(identity,12);
         Switch identityAutomatic=new Switch(this);SwitchTheme.apply(identityAutomatic,palette);identityAutomatic.setText("统一认证自动登录");identityAutomatic.setTextSize(14);identityAutomatic.setTextColor(INK);identityAutomatic.setChecked(savedIdentity&&identityPrefs.getBoolean("autoLogin",false));identityAutomatic.setEnabled(!identityBusy);identity.addView(identityAutomatic);
         identityAutomatic.setOnCheckedChangeListener((v,enabled)->{if(enabled&&(!savedIdentity||!identityPrefs.getBoolean("completed",false))){identityAutomatic.setChecked(false);openIdentity(false);}else identityPrefs.edit().putBoolean("autoLogin",enabled).apply();});space(identity,10);
@@ -422,6 +422,7 @@ public class MainActivity extends Activity {
         content.addView(label("课表与自定义课程保存在本机，离线可查看。",12,MUTED,false));return content;
     }
     void openIdentity(boolean repair){if(identityBusy)return;Intent intent=new Intent(this,IdentityActivity.class);intent.putExtra("repair",repair);startActivity(intent);}
+    void openElectricity(){if(identityBusy)return;startActivity(new Intent(this,IdentityActivity.class).putExtra("electricity",true));}
     void clearIdentityPrompt(){
         if(identityBusy)return;UiSheet sheet=new UiSheet(this,"清除统一认证？","教务账号和本地课程继续保留",.43f);sheet.body.addView(label("将清除本机统一认证凭证与校园服务会话，并关闭统一认证自动登录。",14,INK,false));
         sheet.actions(this,"确认清除",()->{sheet.dialog.dismiss();identityBusy=true;render();authIo.execute(()->{
