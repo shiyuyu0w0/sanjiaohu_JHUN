@@ -15,6 +15,7 @@ development.keystore
 
 # --- 打包产物 ---
 *.apk
+*.apk.idsig
 *.aab
 
 # --- IDE ---

@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" android:versionCode="37" android:versionName="1.0.7">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" android:versionCode="40" android:versionName="1.0.10">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
     <application android:label="三角狐" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/network_security_config" android:supportsRtl="true">

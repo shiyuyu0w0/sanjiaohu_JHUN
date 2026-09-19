@@ -3,8 +3,8 @@ param(
     [string]$Java = 'C:/Program Files/Android/Android Studio/jbr',
     [string]$Platform = 'android-36.1',
     [string]$BuildTools = '36.1.0',
-    [string]$Work = "$PSScriptRoot/../../work/android-build",
-    [string]$Apk = "$PSScriptRoot/Sanjiaohu-1.0.7.apk"
+    [string]$Work = "$PSScriptRoot/build/android-build",
+    [string]$Apk = "$PSScriptRoot/Sanjiaohu-1.0.10.apk"
 )
 $ErrorActionPreference = 'Stop'
 # Relaxed only around native calls: Windows PowerShell turns a native tool's stderr into a

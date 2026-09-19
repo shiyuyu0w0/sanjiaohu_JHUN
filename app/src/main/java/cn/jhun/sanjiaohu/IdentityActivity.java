@@ -43,6 +43,8 @@ public final class IdentityActivity extends Activity {
     int generation;
     ValueCallback<Uri[]> fileCallback;
     Dialog webDialog;
+    ElectricityPanel electricityPanel;
+    boolean manualVerificationVisible;
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
@@ -55,10 +57,12 @@ public final class IdentityActivity extends Activity {
         AppTheme.applySystemBars(this,theme);
         LinearLayout root=column();root.setBackgroundColor(theme.surface);root.setOnApplyWindowInsetsListener((v,i)->{v.setPadding(i.getSystemWindowInsetLeft(),i.getSystemWindowInsetTop(),i.getSystemWindowInsetRight(),i.getSystemWindowInsetBottom());return i.consumeSystemWindowInsets();});
         LinearLayout header=row();header.setPadding(dp(18),dp(10),dp(18),dp(10));header.addView(action("‹",false,()->back()),new LinearLayout.LayoutParams(dp(44),dp(44)));header.getChildAt(0).setContentDescription("返回");
-        LinearLayout titles=column();titles.setPadding(dp(14),0,dp(8),0);titles.addView(text(electricity?"用电缴费":repair?"网上报修":"统一身份认证",20,theme.text,true));subtitle=text("江汉大学 · 校园服务",11,theme.muted,false);titles.addView(subtitle);header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout titles=column();titles.setPadding(dp(14),0,dp(8),0);titles.addView(text(electricity?"电费":repair?"网上报修":"统一身份认证",20,theme.text,true));subtitle=text("江汉大学 · 校园服务",11,theme.muted,false);titles.addView(subtitle);header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
         TextView manage=action("账号",false,()->manualLogin());header.addView(manage,new LinearLayout.LayoutParams(dp(52),dp(44)));TextView refresh=action("↻",false,()->reload());refresh.setContentDescription("重新加载");LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(dp(44),dp(44));rp.leftMargin=dp(8);header.addView(refresh,rp);root.addView(header);
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(100);progress.setProgressTintList(ColorStateList.valueOf(theme.primary));root.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
-        body=new FrameLayout(this);root.addView(body,new LinearLayout.LayoutParams(-1,0,1));buildForm();buildError();createWeb();setContentView(root);
+        body=new FrameLayout(this);root.addView(body,new LinearLayout.LayoutParams(-1,0,1));buildForm();buildError();createWeb();
+        if(electricity)electricityPanel=new ElectricityPanel(this);
+        setContentView(root);
         if(repair||electricity){showWeb();startPage(loginEntry());}else prepareLogin(false);
     }
     String loginEntry(){return electricity?IdentityPolicy.ELECTRICITY_LOGIN:IdentityPolicy.LOGIN;}
@@ -76,7 +80,7 @@ public final class IdentityActivity extends Activity {
     }
     void buildError(){errorPanel=column();errorPanel.setGravity(Gravity.CENTER);errorPanel.setPadding(dp(28),dp(24),dp(28),dp(24));errorPanel.setBackgroundColor(theme.surface);errorPanel.addView(text("校园服务暂时未能打开",20,theme.text,true));gap(errorPanel,12);errorText=text("请检查网络后重试。",14,theme.muted,false);errorText.setGravity(Gravity.CENTER);errorPanel.addView(errorText);gap(errorPanel,24);errorPanel.addView(action("重新加载",true,()->reload()),new LinearLayout.LayoutParams(dp(160),dp(46)));gap(errorPanel,12);errorPanel.addView(action("登录统一认证",false,()->manualLogin()),new LinearLayout.LayoutParams(dp(160),dp(46)));gap(errorPanel,12);errorPanel.addView(action("连接诊断",false,()->showDiagnostics()),new LinearLayout.LayoutParams(dp(160),dp(42)));errorPanel.setVisibility(View.GONE);body.addView(errorPanel,new FrameLayout.LayoutParams(-1,-1));}
     void createWeb(){
-        web=new WebView(this);web.setBackgroundColor(theme.surface);body.addView(web,0,new FrameLayout.LayoutParams(-1,-1));WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setCacheMode(WebSettings.LOAD_NO_CACHE);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setUseWideViewPort(true);settings.setLoadWithOverviewMode(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSupportMultipleWindows(false);CookieManager.getInstance().setAcceptCookie(true);
+        web=new WebView(this);web.setBackgroundColor(theme.surface);body.addView(web,0,new FrameLayout.LayoutParams(-1,-1));setWebVisible(!backgroundElectricity());WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setCacheMode(WebSettings.LOAD_NO_CACHE);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setUseWideViewPort(true);settings.setLoadWithOverviewMode(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSupportMultipleWindows(false);CookieManager.getInstance().setAcceptCookie(true);
         settings.setUserAgentString(IdentityDiagnostics.browserAgent(WebSettings.getDefaultUserAgent(this)));
         web.setOnTouchListener((v,e)->{if(e.getActionMasked()==MotionEvent.ACTION_UP)navigation.userGesture(SystemClock.elapsedRealtime());return false;});
         web.setWebChromeClient(new WebChromeClient(){
@@ -108,6 +112,11 @@ public final class IdentityActivity extends Activity {
                 if(request.isForMainFrame())networkError("学校跳转到了暂不支持的地址："+IdentityDiagnostics.route(url)+"。请复制连接诊断以便排查。");return true;
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){
+                // Manual verification may show the login page; hide subsequent service
+                // redirects before the new document can draw its first frame.
+                if(electricity&&IdentityPolicy.electricity(url))manualVerificationVisible=false;
+                if(backgroundElectricity())setWebVisible(false);
+                if(electricityPanel!=null)electricityPanel.invalidate();
                 documentReady=false;documentEpoch++;diagnostics.add(IdentityDiagnostics.Event.START,url,0);
                 if(!navigation.visit(url,SystemClock.elapsedRealtime())){networkError("学校页面出现重复跳转，已停止循环加载。请重新加载或返回后重试。");return;}
                 // Observe a fresh CAS ticket only when it is redirected from the real IdP.
@@ -116,6 +125,7 @@ public final class IdentityActivity extends Activity {
                 lastUrl=url;loaded=false;failed=false;errorPanel.setVisibility(View.GONE);progress.setVisibility(View.VISIBLE);subtitle.setText("正在连接校园服务…");
                 handler.removeCallbacks(pageTimeout);handler.postDelayed(pageTimeout,45000);
                 if(IdentityPolicy.auth(url)&&!manualPage)showForm();
+                else if(backgroundElectricity())electricityPanel.connecting();
             }
             @Override public void onPageFinished(WebView view,String url){
                 if(failed||navigation.stopped||isFinishing()||!currentDocument(url))return;loaded=true;handler.removeCallbacks(pageTimeout);progress.setVisibility(View.INVISIBLE);subtitle.setText(electricity?"校园用电服务":repair?"校园后勤服务":"独立管理校园服务账号");
@@ -123,7 +133,7 @@ public final class IdentityActivity extends Activity {
                 // Let the school's desktop landing finish consuming its SSO session first.
                 if(repair&&IdentityPolicy.desktopRepair(url)){showWeb();view.loadUrl(IdentityPolicy.REPAIR);return;}
                 if(IdentityPolicy.auth(url)){prepareSchoolForm();if(!attempting&&!manualPage){showForm();inspect();if((repair||electricity)&&!autoTried)tryAutomatic();}}
-                else if(electricity&&IdentityPolicy.electricity(url)){showWeb();if(ticketSeen)complete();}
+                else if(electricity&&IdentityPolicy.electricity(url)){showWeb();if(ticketSeen)complete();if(electricityPanel!=null)electricityPanel.ready(url);}
                 else if(electricity&&PaymentNavigation.alipayWeb(url)){showWeb();}
                 else if(!electricity&&ticketSeen&&(IdentityPolicy.hall(url)||IdentityPolicy.repairLanding(url))){complete();}
                 else if(!electricity&&IdentityPolicy.hall(url)){verifyHall(0);}
@@ -173,6 +183,7 @@ public final class IdentityActivity extends Activity {
     }
     void manualLogin(){prepareLogin(true);}
     void prepareLogin(boolean switchAccount){
+        if(electricityPanel!=null&&!saving&&!clearing){electricityPanel.checkout=false;electricityPanel.invalidate();}
         if(saving||clearing)return;cancelAttempt();manualPage=false;autoTried=true;ticketSeen=false;clearing=true;showForm();submit.setEnabled(false);status.setText("正在准备统一身份认证…");if(web==null)createWeb();web.stopLoading();
         Runnable open=()->{if(isDestroyed())return;clearing=false;submit.setEnabled(true);startPage(loginEntry());};
         if(switchAccount){prefs.edit().putBoolean("completed",false).apply();SessionCookies.identity(open);}else open.run();
@@ -227,7 +238,7 @@ public final class IdentityActivity extends Activity {
     void cancelAttempt(){generation++;attempting=false;submitted=false;pendingPassword=null;pendingAccount=null;setInputs(true);}
     void setInputs(boolean enabled){account.setEnabled(enabled);password.setEnabled(enabled);remember.setEnabled(enabled);submit.setEnabled(enabled&&!clearing);if(enabled)submit.setText("登录");}
     void officialPage(){
-        if(clearing||saving)return;cancelAttempt();manualPage=true;ticketSeen=false;showWeb();if(web==null)createWeb();if(navigation.stopped||!IdentityPolicy.auth(web.getUrl()))startPage(loginEntry());
+        if(clearing||saving)return;cancelAttempt();manualPage=true;manualVerificationVisible=true;ticketSeen=false;showWeb();if(web==null)createWeb();if(navigation.stopped||!IdentityPolicy.auth(web.getUrl()))startPage(loginEntry());
         Toast.makeText(this,"在学校页面亲自完成验证；网页中输入的密码不会被应用读取或保存",Toast.LENGTH_LONG).show();
     }
     void complete(){
@@ -239,20 +250,22 @@ public final class IdentityActivity extends Activity {
             boolean stored=preserve;try{if(keep){IdentityCredentialStore.save(this,user,secret);stored=true;}else if(!preserve){IdentityCredentialStore.clear(this);}}catch(Exception e){stored=false;IdentityCredentialStore.clear(this);}
             prefs.edit().putBoolean("completed",true).putBoolean("blocked",false).putBoolean("autoLogin",stored&&(keep||previousAuto)).putLong("lastAuthAt",System.currentTimeMillis()).apply();final boolean didStore=stored;
             handler.post(()->{if(isDestroyed())return;saving=false;setInputs(true);if(keep&&!didStore)Toast.makeText(this,"认证成功，但凭证保存失败，下次需要手动登录",Toast.LENGTH_LONG).show();
-                if(electricity){manualPage=false;showWeb();}else if(repair){manualPage=false;showWeb();if(!IdentityPolicy.repairLanding(web.getUrl()))web.loadUrl(IdentityPolicy.REPAIR);}else{Toast.makeText(this,didStore?"统一认证登录成功，凭证已单独加密保存":"统一认证登录成功",Toast.LENGTH_SHORT).show();finish();}
+                if(electricity){manualPage=false;showWeb();if(electricityPanel!=null)electricityPanel.ready(web.getUrl());}else if(repair){manualPage=false;showWeb();if(!IdentityPolicy.repairLanding(web.getUrl()))web.loadUrl(IdentityPolicy.REPAIR);}else{Toast.makeText(this,didStore?"统一认证登录成功，凭证已单独加密保存":"统一认证登录成功",Toast.LENGTH_SHORT).show();finish();}
             });
         });
     }
-    void networkError(String message){documentReady=false;documentEpoch++;probeDocument();navigation.stop();handler.removeCallbacks(pageTimeout);loaded=false;failed=true;ticketSeen=false;cancelAttempt();if(web!=null)web.stopLoading();progress.setVisibility(View.INVISIBLE);subtitle.setText("连接未完成");if(form.getVisibility()==View.VISIBLE){status.setText(message);}else{errorText.setText(message);errorPanel.setVisibility(View.VISIBLE);}}
-    void reload(){if(clearing||saving)return;cancelAttempt();errorPanel.setVisibility(View.GONE);if(form.getVisibility()==View.VISIBLE)status.setText("正在重新连接学校…");startPage(loginEntry());}
-    void showForm(){form.setVisibility(View.VISIBLE);errorPanel.setVisibility(View.GONE);if(web!=null)web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);}
-    void showWeb(){form.setVisibility(View.GONE);errorPanel.setVisibility(View.GONE);if(web!=null)web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);}
-    void back(){if(saving)return;if(!navigation.stopped&&form.getVisibility()!=View.VISIBLE&&web!=null&&web.canGoBack()){cancelAttempt();navigation.begin(SystemClock.elapsedRealtime());web.goBack();}else finish();}
+    void networkError(String message){if(electricityPanel!=null)electricityPanel.invalidate();documentReady=false;documentEpoch++;probeDocument();navigation.stop();handler.removeCallbacks(pageTimeout);loaded=false;failed=true;ticketSeen=false;cancelAttempt();if(web!=null)web.stopLoading();progress.setVisibility(View.INVISIBLE);subtitle.setText("连接未完成");if(form.getVisibility()==View.VISIBLE){status.setText(message);}else{errorText.setText(message);errorPanel.setVisibility(View.VISIBLE);}}
+    void reload(){if(clearing||saving)return;if(electricityPanel!=null&&electricityPanel.visible()&&electricityPanel.connected){electricityPanel.refresh();return;}if(electricityPanel!=null&&electricityPanel.back())return;cancelAttempt();errorPanel.setVisibility(View.GONE);if(form.getVisibility()==View.VISIBLE)status.setText("正在重新连接学校…");startPage(loginEntry());}
+    boolean backgroundElectricity(){return electricity&&!manualVerificationVisible&&(electricityPanel==null||!electricityPanel.checkout);}
+    void setWebVisible(boolean visible){if(web!=null){web.setAlpha(visible?1f:0f);web.setImportantForAccessibility(visible?View.IMPORTANT_FOR_ACCESSIBILITY_AUTO:View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);}}
+    void showForm(){manualVerificationVisible=false;setWebVisible(false);if(electricityPanel!=null)electricityPanel.hide();form.setVisibility(View.VISIBLE);errorPanel.setVisibility(View.GONE);}
+    void showWeb(){if(backgroundElectricity()&&electricityPanel!=null){if(electricityPanel.connected)electricityPanel.show();else electricityPanel.connecting();return;}if(electricityPanel!=null)electricityPanel.hide();form.setVisibility(View.GONE);errorPanel.setVisibility(View.GONE);setWebVisible(true);}
+    void back(){if(saving)return;if(electricityPanel!=null){if(electricityPanel.visible()){finish();return;}if(electricityPanel.back())return;}if(!navigation.stopped&&form.getVisibility()!=View.VISIBLE&&web!=null&&web.canGoBack()){cancelAttempt();navigation.begin(SystemClock.elapsedRealtime());web.goBack();}else finish();}
     @Override public void onBackPressed(){back();}
     @Override protected void onPause(){if(web!=null)web.onPause();super.onPause();}
-    @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
+    @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();if(electricityPanel!=null&&electricityPanel.checkout&&lastAlipayLaunch>0){lastAlipayLaunch=0;electricityPanel.back();}}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request!=701||fileCallback==null)return;Uri[] uris=null;if(result==RESULT_OK&&data!=null){java.util.ArrayList<Uri> list=new java.util.ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<data.getClipData().getItemCount();i++){Uri uri=data.getClipData().getItemAt(i).getUri();if("content".equals(uri.getScheme()))list.add(uri);}}else if(data.getData()!=null&&"content".equals(data.getData().getScheme()))list.add(data.getData());if(!list.isEmpty())uris=list.toArray(new Uri[0]);}fileCallback.onReceiveValue(uris);fileCallback=null;}
-    @Override protected void onDestroy(){generation++;handler.removeCallbacksAndMessages(null);pendingPassword=null;password.setText("");if(webDialog!=null)webDialog.dismiss();if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}if(web!=null){body.removeView(web);web.stopLoading();web.destroy();web=null;}vault.shutdown();super.onDestroy();}
+    @Override protected void onDestroy(){if(electricityPanel!=null)electricityPanel.destroy();generation++;handler.removeCallbacksAndMessages(null);pendingPassword=null;password.setText("");if(webDialog!=null)webDialog.dismiss();if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}if(web!=null){body.removeView(web);web.stopLoading();web.destroy();web=null;}vault.shutdown();super.onDestroy();}
     void showWebDialog(String message,JsResult result,boolean confirm){
         if(webDialog!=null)webDialog.dismiss();Dialog dialog=new Dialog(this);webDialog=dialog;dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);LinearLayout panel=column();panel.setPadding(dp(24),dp(22),dp(24),dp(20));panel.setBackground(shape(theme.surface,24));panel.addView(text("校园服务提示",19,theme.text,true));gap(panel,14);TextView words=text(message.length()>800?message.substring(0,800):message,14,theme.text,false);ScrollView scroll=new ScrollView(this);scroll.addView(words);panel.addView(scroll,new LinearLayout.LayoutParams(-1,dp(144)));gap(panel,18);LinearLayout buttons=row();final boolean[] handled={false};
         if(confirm){TextView cancel=action("取消",false,()->{handled[0]=true;result.cancel();dialog.dismiss();});buttons.addView(cancel,new LinearLayout.LayoutParams(0,dp(46),1));}TextView ok=action("确定",true,()->{handled[0]=true;result.confirm();dialog.dismiss();});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(46),1);lp.leftMargin=confirm?dp(10):0;buttons.addView(ok,lp);panel.addView(buttons);dialog.setContentView(panel);dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));dialog.setOnDismissListener(v->{if(!handled[0])result.cancel();});dialog.show();dialog.getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels-dp(40),dp(420)),-2);
