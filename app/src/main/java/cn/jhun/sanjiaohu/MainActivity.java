@@ -53,6 +53,8 @@ public class MainActivity extends Activity {
     final List<CourseCardView> visibleCards=new ArrayList<>();
     WebView web;
     Schedule schedule;
+    JSONObject scheduleCandidate;
+    String schedulePortalScript,scheduleListScript,scheduleStage="";
     AcademicStore academicStore;
     Grades grades,summaryGrades;
     Exams exams;
@@ -68,7 +70,7 @@ public class MainActivity extends Activity {
     String selectedTerm="",gradeTerm="",jobKind="schedule",jobTerm="",portalScript,parserScript;
     String gradeState="尚无本地成绩 · 联网后获取";
     final List<String> terms=new ArrayList<>();
-    String state="尚未同步 · 登录后，课表会保存在这台手机", script;
+    String state="尚未同步 · 登录后，课表会保存在这台手机";
     boolean busy=false, inBackground=false, loadError=false, mainLoaded=false, identityBusy=false;
     int selectedWeek=1, generation=0;
     long deadline;
@@ -83,7 +85,7 @@ public class MainActivity extends Activity {
         if(saved!=null){page=saved.getInt("page",0);todayLabel=saved.getBoolean("todayLabel",false);wallpaperAspect=saved.getFloat("wallpaperAspect",.65f);}
         refreshAppearance();
         cache=new AtomicFile(new File(getFilesDir(),"schedule.json"));
-        try {script=read(getAssets().open("extract.js"));loginStateScript=read(getAssets().open("login-state.js"));loginSubmitScript=read(getAssets().open("login-submit.js"));} catch(Exception e) {script="({error:'extractor'})";}
+        try {loginStateScript=read(getAssets().open("login-state.js"));loginSubmitScript=read(getAssets().open("login-submit.js"));schedulePortalScript=read(getAssets().open("schedule-portal.js"));scheduleListScript=read(getAssets().open("schedule-list.js"));} catch(Exception e) {throw new IllegalStateException("课表适配器缺失",e);}
         try {
             JSONObject data=new JSONObject(new String(cache.readFully(),StandardCharsets.UTF_8));
             if(CachePolicy.usable(data.optLong("savedAt",0),data.optString("source",""))) {
@@ -157,6 +159,7 @@ public class MainActivity extends Activity {
     void loadSchedule(){
         schedule=null;
         try{schedule=new Schedule(academicStore.load("schedule",selectedTerm));state="本地课表 · 上次更新 "+stamp(schedule.savedAt);}catch(Exception e){state="该学期暂无本地课表 · 联网后获取";}
+        scheduleCandidate=null;try{scheduleCandidate=academicStore.scheduleSnapshot(selectedTerm,"candidate");if(scheduleCandidate!=null)state="发现课表更新 · 待确认，当前课表已保留";}catch(Exception ignored){}
         selectedWeek=currentWeek();
     }
     void loadGrades(){
@@ -224,10 +227,10 @@ public class MainActivity extends Activity {
     void startPoll(){if(busy)return;busy=true;int token=++generation;deadline=android.os.SystemClock.elapsedRealtime()+(jobKind.equals("exams")?120000:45000);setState("正在更新"+(jobKind.equals("exams")?"考试安排":jobKind.equals("summary")?"汇总":jobKind.equals("grades")?"成绩":"课表")+" · 本地记录随时可看");handler.postDelayed(()->poll(token),600);}
     void poll(int token){
         if(token!=generation || !busy || inBackground)return;
-        if(android.os.SystemClock.elapsedRealtime()>deadline){fail("更新超时 · 已保留本地课表");return;}
+        if(android.os.SystemClock.elapsedRealtime()>deadline){fail((jobKind.equals("schedule")?scheduleStage+" · ":"")+"更新超时 · 已保留本地课表");return;}
         if(loadError){fail("连接失败 · 已保留本地课表");return;}
         if(!mainLoaded || !sourceOrigin(web.getUrl())){handler.postDelayed(()->poll(token),700);return;}
-        String query=jobKind.equals("exams")?examPortalScript+"("+token+","+JSONObject.quote(jobTerm)+","+parserScript+")":portalScript+"("+token+","+JSONObject.quote(jobKind)+","+JSONObject.quote(jobTerm)+","+parserScript+")";
+        String query=jobKind.equals("schedule")?schedulePortalScript+"("+token+","+JSONObject.quote(jobTerm)+","+scheduleListScript+")":jobKind.equals("exams")?examPortalScript+"("+token+","+JSONObject.quote(jobTerm)+","+parserScript+")":portalScript+"("+token+","+JSONObject.quote(jobKind)+","+JSONObject.quote(jobTerm)+","+parserScript+")";
         web.evaluateJavascript(query,result->{
             if(token!=generation || !busy)return;
             try {
@@ -237,6 +240,11 @@ public class MainActivity extends Activity {
                     String error=obj.optString("error");
                     if(error.equals("login")){tryAutoLogin(token);return;}
                     if(error.equals("unavailable")){fail("教务系统未提供该学期 · 已保留上次记录");return;}
+                    if(jobKind.equals("schedule")){
+                        scheduleStage=scheduleStageLabel(obj.optString("stage"));
+                        if(error.equals("structure")){fail(scheduleStage+" · 已保留本地课表");return;}
+                        setState(scheduleStage+" · 本地记录随时可看");handler.postDelayed(()->poll(token),700);return;
+                    }
                     if(error.equals("structure")||error.equals("incomplete")){fail("教务数据尚未完整加载 · 已保留上次记录，可稍后重试");return;}
                     handler.postDelayed(()->poll(token),700);return;
                 }
@@ -250,8 +258,9 @@ public class MainActivity extends Activity {
                     Grades fresh=new Grades(obj);academicStore.save("grades",obj);grades=fresh;
                     gradeState="已保存到本地 · "+stamp(grades.savedAt);
                 }else{
-                    Schedule fresh=new Schedule(obj);academicStore.save("schedule",obj);schedule=fresh;
-                    state="已保存到本地 · "+stamp(schedule.savedAt);
+                    Schedule fresh=new Schedule(obj);
+                    if(academicStore.stageSchedule(obj)){schedule=fresh;scheduleCandidate=null;state="已保存到本地 · "+stamp(schedule.savedAt);}
+                    else{scheduleCandidate=obj;state="发现课表更新 · 待确认，当前课表已保留";}
                 }
                 authenticated();busy=false;generation++;CookieManager.getInstance().flush();render();refreshSummary();
             }catch(Exception e){fail("数据格式变化或保存失败 · 已保留上次记录");}
@@ -267,7 +276,7 @@ public class MainActivity extends Activity {
     void showMenu(View anchor){
         if(page!=1)return;
         if(moreMenu!=null && moreMenu.isShowing()){moreMenu.dismiss();return;}
-        moreMenu=MoreMenu.show(this,anchor,palette,id->{switch(id){case 1:cancelSync();sync();break;case 2:changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;}});
+        moreMenu=MoreMenu.show(this,anchor,palette,id->{switch(id){case 1:cancelSync();sync();break;case 2:changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;case 20:reviewSchedule();break;case 21:restoreSchedule();break;}});
     }
     void refreshAppearance(){
         wallpaper=WallpaperStore.load(this);int primary=prefs.getBoolean("manualTheme",false)?prefs.getInt("manualThemeColor",0xff2ecbff):backgroundPrimary();
@@ -309,6 +318,7 @@ public class MainActivity extends Activity {
         if(page==4){term.setTextColor(palette.deepAccent);term.setMinHeight(dp(40));term.setGravity(Gravity.CENTER_VERTICAL);term.setBackground(shape(palette.entrySurface,12));term.setOnClickListener(v->chooseExamTerm());term.setFocusable(true);}
         pageContent.addView(term,new LinearLayout.LayoutParams(-1,-2));
         if(page==1){
+            if(scheduleCandidate!=null)pageContent.addView(themedButton("发现课表更新 · 点击核对",()->reviewSchedule(),false),new LinearLayout.LayoutParams(-1,dp(40)));
             LinearLayout weekBar=row();previousWeekButton=button("‹",()->changeWeek(selectedWeek-1));previousWeekButton.setContentDescription("上一周");weekBar.addView(previousWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));
             weekTitle=button("",()->chooseWeek());weekTitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);weekBar.addView(weekTitle,new LinearLayout.LayoutParams(0,dp(44),1));nextWeekButton=button("›",()->changeWeek(selectedWeek+1));nextWeekButton.setContentDescription("下一周");weekBar.addView(nextWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));pageContent.addView(weekBar);updateWeekTitle();
             weekHost=new WeekSwipeLayout(this,new WeekSwipeLayout.Listener(){public void drag(float offset){dragWeek(offset);}public void release(int direction){releaseWeek(direction);}});weekHost.addView(weekView(),new FrameLayout.LayoutParams(-1,-1));pageContent.addView(weekHost,new LinearLayout.LayoutParams(-1,0,1));
@@ -333,6 +343,30 @@ public class MainActivity extends Activity {
         String mid="第 "+selectedWeek+" 周";LocalDate a=anchor();
         if(a!=null)mid+="  ·  "+a.plusWeeks(selectedWeek-1).format(DateTimeFormatter.ofPattern("M/d"))+"—"+a.plusWeeks(selectedWeek-1).plusDays(6).format(DateTimeFormatter.ofPattern("M/d"));else mid+="  ·  待校准";
         weekTitle.setText(mid);previousWeekButton.setEnabled(selectedWeek>1);previousWeekButton.setAlpha(selectedWeek>1?1:.35f);nextWeekButton.setEnabled(selectedWeek<maxWeek());nextWeekButton.setAlpha(selectedWeek<maxWeek()?1:.35f);
+    }
+    String scheduleStageLabel(String stage){
+        switch(stage){case "schedule-menu":return "正在打开教学安排";case "schedule-tab":return "正在打开个人课表";case "schedule-form":return "等待课表查询表单";case "term-loading":case "term-switching":return "正在切换目标学期";case "list-switching":return "正在切换列表视图";case "list-switch-failed":return "列表视图未能切换";case "report-pagination":return "等待课表所有分页";case "report-not-found":return "等待课程列表";case "empty-unconfirmed":return "等待学校确认空课表";case "report-settling":return "正在校验课表完整性";case "term-mismatch":case "selection-changed":return "课表学期尚未匹配";case "table-structure":case "rows-unreadable":return "课表列表格式无法识别";case "report-error":return "学校课表查询失败";default:return "正在加载列表课表";}
+    }
+    void reviewSchedule(){
+        final String term=selectedTerm;cancelSync();
+        try{
+            final JSONObject candidate=academicStore.scheduleSnapshot(term,"candidate");if(candidate==null){Toast.makeText(this,"暂无待确认的课表更新",Toast.LENGTH_SHORT).show();return;}
+            final String fingerprint=ScheduleRevision.fingerprint(candidate);Schedule fresh=new Schedule(candidate);
+            UiSheet sheet=new UiSheet(this,"确认课表更新",term,.84f);
+            int oldCount=schedule==null?0:ScheduleRevision.courseCount(schedule.json),newCount=ScheduleRevision.courseCount(candidate);
+            sheet.body.addView(label("当前 "+oldCount+" 门 → 新课表 "+newCount+" 门",19,INK,true));space(sheet.body,10);
+            sheet.body.addView(label("确认后替换学校课表，自定义课程不受影响。可在更多菜单恢复上一份。",13,MUTED,false));space(sheet.body,14);
+            JSONArray issues=candidate.optJSONArray("issues");if(issues!=null&&issues.length()>0){sheet.body.addView(label("有 "+issues.length()+" 行未能解析，请先核对",15,palette.error,true));for(int i=0;i<issues.length();i++){JSONObject issue=issues.getJSONObject(i);space(sheet.body,6);sheet.body.addView(label(issue.optString("name")+" · "+issue.optString("reason")+"\n"+issue.optString("arrangement"),12,MUTED,false));}space(sheet.body,14);}
+            for(Course c:fresh.courses){sheet.body.addView(label(c.name,15,INK,true));space(sheet.body,4);sheet.body.addView(label("周"+"一二三四五六日".charAt(c.day-1)+" · "+c.start+"—"+c.end+" 节 · "+c.weekText+" 周\n"+c.teacher+" · "+c.room,12,MUTED,false));space(sheet.body,12);}
+            JSONArray extras=candidate.optJSONArray("unscheduled");if(extras!=null&&extras.length()>0){sheet.body.addView(label("无固定上课安排",15,INK,true));for(int i=0;i<extras.length();i++){JSONObject extra=extras.getJSONObject(i);space(sheet.body,6);sheet.body.addView(label(extra.optString("name")+" · "+extra.optString("note"),12,MUTED,false));}}
+            TextView keep=themedButton("保留当前课表",()->{try{academicStore.discardSchedule(term);sheet.dialog.dismiss();loadSchedule();render();}catch(Exception e){Toast.makeText(this,"暂时无法保存选择，请重试",Toast.LENGTH_LONG).show();}},false);sheet.footer.addView(keep,new LinearLayout.LayoutParams(0,dp(48),1));
+            TextView accept=themedButton("使用新课表",()->{try{academicStore.acceptSchedule(term,fingerprint);sheet.dialog.dismiss();loadSchedule();render();}catch(Exception e){Toast.makeText(this,"候选课表已变化或保存失败，请重新查看",Toast.LENGTH_LONG).show();}},true);LinearLayout.LayoutParams acceptSize=new LinearLayout.LayoutParams(0,dp(48),1);acceptSize.leftMargin=dp(10);sheet.footer.addView(accept,acceptSize);showSheet(sheet);
+        }catch(Exception e){Toast.makeText(this,"候选课表读取失败，当前课表继续保留",Toast.LENGTH_LONG).show();}
+    }
+    void restoreSchedule(){
+        final String term=selectedTerm;cancelSync();try{JSONObject previous=academicStore.scheduleSnapshot(term,"previous");if(previous==null){Toast.makeText(this,"尚无可恢复的上一份课表",Toast.LENGTH_SHORT).show();return;}
+            UiSheet sheet=new UiSheet(this,"恢复上一份课表",term,.47f);sheet.body.addView(label("将恢复 "+stamp(previous.optLong("savedAt"))+" 保存的 "+ScheduleRevision.courseCount(previous)+" 门课程。",15,INK,false));sheet.actions(this,"恢复",()->{try{academicStore.restoreSchedule(term);sheet.dialog.dismiss();loadSchedule();render();}catch(Exception e){Toast.makeText(this,"恢复失败，当前课表继续保留",Toast.LENGTH_LONG).show();}});showSheet(sheet);
+        }catch(Exception e){Toast.makeText(this,"上一份课表读取失败",Toast.LENGTH_LONG).show();}
     }
     void finishWeekTransition(){
         if(weekAnimator!=null){weekAnimator.removeAllUpdateListeners();weekAnimator.removeAllListeners();weekAnimator.cancel();weekAnimator=null;}

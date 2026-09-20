@@ -26,6 +26,8 @@ public final class MoreMenu {
         TextView close=text(activity,"×",24,theme.muted,false);close.setGravity(Gravity.CENTER);close.setContentDescription("关闭更多菜单");close.setFocusable(true);close.setBackground(ripple(activity,theme.primary,theme.rippleMask));close.setOnClickListener(v->popup.dismiss());heading.addView(close,new LinearLayout.LayoutParams(dp(activity,44),dp(activity,44)));content.addView(heading);
         section(activity,content,"课表",theme);
         row(activity,content,"更新课表",1,theme,popup,action);
+        row(activity,content,"核对课表更新",20,theme,popup,action);
+        row(activity,content,"恢复上一份课表",21,theme,popup,action);
         row(activity,content,"切换学期",12,theme,popup,action);
         row(activity,content,"回到本周",2,theme,popup,action);
         row(activity,content,"周次校准",3,theme,popup,action);
