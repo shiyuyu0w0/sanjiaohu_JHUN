@@ -10,7 +10,7 @@ import org.json.JSONObject;
 final class AcademicStore {
     private final File directory;
     AcademicStore(Context context){directory=context.getFilesDir();}
-    private AtomicFile file(String kind,String term){if(!kind.equals("schedule")&&!kind.equals("grades")&&!kind.equals("summary"))throw new IllegalArgumentException();return new AtomicFile(new File(directory,kind+"-"+(kind.equals("summary")?"all":Term.key(term))+".json"));}
+    private AtomicFile file(String kind,String term){if(!kind.equals("schedule")&&!kind.equals("grades")&&!kind.equals("summary")&&!kind.equals("exams"))throw new IllegalArgumentException();return new AtomicFile(new File(directory,kind+"-"+(kind.equals("summary")?"all":Term.key(term))+".json"));}
     JSONObject load(String kind,String term)throws Exception{
         JSONObject data=new JSONObject(new String(file(kind,term).readFully(),StandardCharsets.UTF_8));
         boolean scope=kind.equals("summary")?data.optString("scope").equals("all"):Term.same(term,data.getString("term"));

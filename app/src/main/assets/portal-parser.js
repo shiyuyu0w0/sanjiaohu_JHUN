@@ -135,5 +135,33 @@
     }
     return result;
   }
-  return {term:term,schedule:schedule,grades:grades,effective:effective,reportMatches:reportMatches};
+  function exams(doc,target,round,queryVerified){
+    try{var url=new URL(doc.URL);if(url.origin!=='https://jwxt.jhun.edu.cn'||url.pathname!=='/student/ksap.ksapb_date.jsp')return {error:'waiting'};}catch(e){return {error:'waiting'};}
+    var body=text(doc.body),actual=term(body);
+    if(!/江汉大学考试安排表/.test(body)||!target||!actual||actual.label!==target.label)return {error:'waiting'};
+    var pages=[],pattern=/第\s*(\d+)\s*页\s*共\s*(\d+)\s*页/g,m;
+    while((m=pattern.exec(body))!==null)pages.push([+m[1],+m[2]]);
+    if(!pages.length)return {error:'structure'};
+    var total=pages[0][1],available=new Set(pages.map(function(p){return p[0];}));
+    if(total<1||pages.some(function(p){return p[1]!==total;})||available.size!==total)return {error:'incomplete'};
+    for(var p=1;p<=total;p++)if(!available.has(p))return {error:'incomplete'};
+    var empty=/没有检索到记录[!！]?/.test(body),result={version:1,complete:true,term:target.label,entries:[]};
+    if(empty)return queryVerified?result:{error:'waiting'};
+    var roundMatch=body.match(/考试轮次\s*[：:]\s*([^\r\n]+)/);
+    if(!roundMatch||clean(roundMatch[1])!==clean(round))return {error:'waiting'};
+    var columns=['课程','学分','考试时间','考试地点','座位号','备注'],keys=['name','credits','time','room','seat','note'],found=false,bad=false;
+    Array.from(doc.querySelectorAll('table')).forEach(function(table){
+      var rows=Array.from(table.rows),header=rows.find(function(r){return cells(r).join('|')===columns.join('|');});
+      if(!header)return;found=true;
+      rows.slice(rows.indexOf(header)+1).forEach(function(row){
+        var values=cells(row);if(values.every(function(v){return !v;}))return;
+        if(values.join('|')===columns.join('|'))return;
+        if(values.length!==columns.length||!values[0]||Array.from(row.cells).some(function(c){return c.colSpan>1||c.rowSpan>1;})){bad=true;return;}
+        var entry={};keys.forEach(function(k,i){entry[k]=values[i];});result.entries.push(entry);
+      });
+    });
+    if(!found||bad||!result.entries.length)return {error:'structure'};
+    return result;
+  }
+  return {term:term,schedule:schedule,grades:grades,effective:effective,reportMatches:reportMatches,exams:exams};
 })()

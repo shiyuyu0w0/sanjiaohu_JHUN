@@ -26,8 +26,8 @@ public class MainActivity extends Activity {
     int BG,INK,MUTED,PRIMARY,ACCENT_TEXT,ON_PRIMARY;
     ThemePalette palette;
     android.graphics.Bitmap wallpaper;
-    final java.util.concurrent.ExecutorService images=java.util.concurrent.Executors.newSingleThreadExecutor();
     boolean imageBusy=false;
+    float wallpaperAspect=.65f;
     final Schedule localSchedule=Schedule.local();
     CustomCourseStore customStore;
     List<Course> localCourses=new ArrayList<>();
@@ -41,6 +41,12 @@ public class MainActivity extends Activity {
     FrameLayout root;
     LinearLayout screen;
     android.animation.ValueAnimator pageAnimator;
+    android.animation.ValueAnimator weekAnimator;
+    WeekSwipeLayout weekHost;
+    TextView weekTitle,previousWeekButton,nextWeekButton;
+    int previewWeek=0,queuedWeek=0;
+    float weekProgress=0;
+    final List<CourseCardView> previousCards=new ArrayList<>();
     int transitionFrom=-1;
     TextView stateText;
     Dialog activeSheet;
@@ -49,6 +55,13 @@ public class MainActivity extends Activity {
     Schedule schedule;
     AcademicStore academicStore;
     Grades grades,summaryGrades;
+    Exams exams;
+    String examTerm="",examState="尚无本地考试安排 · 联网后获取",examPortalScript;
+    final List<String> examTerms=new ArrayList<>();
+    final List<TextView> examBadges=new ArrayList<>();
+    TextView examPendingTitle;
+    final List<Exams.Entry> examBadgeEntries=new ArrayList<>();
+    final Runnable examClock=new Runnable(){public void run(){if(!inBackground&&page==4){updateExamBadges();handler.postDelayed(this,30000);}}};
     UiSheet gradeSummarySheet;
     boolean summaryAll=true;
     String summaryState="尚无本地汇总 · 联网后获取";
@@ -67,7 +80,7 @@ public class MainActivity extends Activity {
         prefs=getSharedPreferences("settings",MODE_PRIVATE);
         customStore=new CustomCourseStore(this);
         try{localCourses=customStore.load();}catch(Exception e){customReadError=true;}
-        if(saved!=null){page=saved.getInt("page",0);todayLabel=saved.getBoolean("todayLabel",false);}
+        if(saved!=null){page=saved.getInt("page",0);todayLabel=saved.getBoolean("todayLabel",false);wallpaperAspect=saved.getFloat("wallpaperAspect",.65f);}
         refreshAppearance();
         cache=new AtomicFile(new File(getFilesDir(),"schedule.json"));
         try {script=read(getAssets().open("extract.js"));loginStateScript=read(getAssets().open("login-state.js"));loginSubmitScript=read(getAssets().open("login-submit.js"));} catch(Exception e) {script="({error:'extractor'})";}
@@ -78,7 +91,7 @@ public class MainActivity extends Activity {
             } else {cache.delete();state="请先登录教务系统，获取你自己的课表";}
         } catch(Exception e){state="尚无本地课表 · 请先登录教务系统";}
         academicStore=new AcademicStore(this);
-        try{portalScript=read(getAssets().open("portal.js"));parserScript=read(getAssets().open("portal-parser.js"));}catch(Exception e){throw new IllegalStateException("教务适配器缺失",e);}
+        try{portalScript=read(getAssets().open("portal.js"));parserScript=read(getAssets().open("portal-parser.js"));examPortalScript=read(getAssets().open("exam-portal.js"));}catch(Exception e){throw new IllegalStateException("教务适配器缺失",e);}
         try{JSONArray catalog=new JSONArray(prefs.getString("terms","[]"));for(int i=0;i<catalog.length();i++){String name=Term.label(catalog.getString(i));if(!terms.contains(name))terms.add(name);}}catch(Exception ignored){}
         if(schedule!=null){try{
             selectedTerm=Term.label(schedule.term);if(!terms.contains(selectedTerm))terms.add(selectedTerm);
@@ -88,16 +101,18 @@ public class MainActivity extends Activity {
         selectedTerm=prefs.getString("selectedTerm",selectedTerm);
         if(!selectedTerm.isEmpty())loadSchedule();
         gradeTerm=prefs.getString("gradeTerm",selectedTerm);loadGrades();
+        examTerm=prefs.getString("examTerm","");loadExams();
+        try{JSONArray catalog=new JSONArray(prefs.getString("examTerms","[]"));for(int i=0;i<catalog.length();i++)examTerms.add(Term.label(catalog.getString(i)));}catch(Exception ignored){}
         try{summaryGrades=new Grades(academicStore.load("summary","入学以来"));summaryState="本地汇总 · "+stamp(summaryGrades.savedAt);}catch(Exception ignored){}
         if(schedule!=null) selectedWeek=currentWeek();
         root=new FrameLayout(this); root.setBackgroundColor(BG);
         root.setOnApplyWindowInsetsListener((v,i)->{v.setPadding(i.getSystemWindowInsetLeft(),i.getSystemWindowInsetTop(),i.getSystemWindowInsetRight(),i.getSystemWindowInsetBottom());return i.consumeSystemWindowInsets();});
         setContentView(root); createWeb(); render();
     }
-    @Override protected void onStart(){super.onStart();inBackground=false;selectedWeek=currentWeek();render();if(prefs.getBoolean("loginCompleted",false)||canAutoLogin())sync();}
-    @Override protected void onStop(){super.onStop();if(pageAnimator!=null)pageAnimator.cancel();if(moreMenu!=null)moreMenu.dismiss();inBackground=true;verified=false;automaticCredentials=null;autoRunning=false;if(busy){generation++;busy=false;web.stopLoading();setState("本地课表 · 返回应用时重新同步");}CookieManager.getInstance().flush();}
-    @Override protected void onDestroy(){if(pageAnimator!=null)pageAnimator.cancel();if(activeSheet!=null)activeSheet.dismiss();handler.removeCallbacksAndMessages(null);images.shutdown();authIo.shutdown();web.destroy();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putBoolean("todayLabel",todayLabel);}
+    @Override protected void onStart(){super.onStart();inBackground=false;selectedWeek=currentWeek();render();handler.removeCallbacks(examClock);if(page==4)handler.postDelayed(examClock,30000);if(prefs.getBoolean("loginCompleted",false)||canAutoLogin())sync();}
+    @Override protected void onStop(){finishWeekTransition();super.onStop();if(pageAnimator!=null)pageAnimator.cancel();if(moreMenu!=null)moreMenu.dismiss();inBackground=true;verified=false;automaticCredentials=null;autoRunning=false;if(busy){generation++;busy=false;web.stopLoading();setState("本地课表 · 返回应用时重新同步");}CookieManager.getInstance().flush();}
+    @Override protected void onDestroy(){finishWeekTransition();if(pageAnimator!=null)pageAnimator.cancel();if(activeSheet!=null)activeSheet.dismiss();handler.removeCallbacksAndMessages(null);authIo.shutdown();web.destroy();super.onDestroy();}
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putBoolean("todayLabel",todayLabel);out.putFloat("wallpaperAspect",wallpaperAspect);}
     @Override public void onConfigurationChanged(android.content.res.Configuration c){super.onConfigurationChanged(c);render();if(activeSheet!=null)activeSheet.getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels,dp(560)),-1);}
     String read(InputStream in)throws IOException {try(InputStream input=in; ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=input.read(b))!=-1)out.write(b,0,n);return out.toString("UTF-8");}}
     String stamp(long ms){return ms==0?"未知":java.time.Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MM/dd HH:mm"));}
@@ -131,12 +146,12 @@ public class MainActivity extends Activity {
     void attachHidden(){if(web.getParent()!=null)((android.view.ViewGroup)web.getParent()).removeView(web);web.setAlpha(0);web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);web.setFocusable(false);root.addView(web,0,new FrameLayout.LayoutParams(1,1));}
     void sync(){
         if(busy||credentialBusy)return;
-        jobKind=page==3?(gradeSummarySheet!=null&&gradeSummarySheet.dialog.isShowing()&&summaryAll?"summary":"grades"):"schedule";jobTerm=jobKind.equals("summary")?"入学以来":page==3?gradeTerm:selectedTerm;
+        jobKind=page==4?"exams":page==3?(gradeSummarySheet!=null&&gradeSummarySheet.dialog.isShowing()&&summaryAll?"summary":"grades"):"schedule";jobTerm=jobKind.equals("exams")?examTerm:jobKind.equals("summary")?"入学以来":page==3?gradeTerm:selectedTerm;
         if(!prefs.getBoolean("loginCompleted",false)&&!canAutoLogin()){showLogin();return;}
         autoTried=false;autoRunning=false;loadError=false;mainLoaded=false;startPoll();web.loadUrl(HOME);
     }
     void cancelSync(){
-        if(busy){if(jobKind.equals("summary"))summaryState=summaryGrades==null?"尚无本地汇总":"本地汇总 · "+stamp(summaryGrades.savedAt);else if(jobKind.equals("grades"))gradeState=grades==null?"尚无该学期的本地成绩":"本地成绩 · "+stamp(grades.savedAt);else state=schedule==null?"尚无该学期的本地课表":"本地课表 · "+stamp(schedule.savedAt);}
+        if(busy){if(jobKind.equals("exams"))examState=exams==null?"尚无本地考试安排":"本地考试安排 · "+stamp(exams.savedAt);else if(jobKind.equals("summary"))summaryState=summaryGrades==null?"尚无本地汇总":"本地汇总 · "+stamp(summaryGrades.savedAt);else if(jobKind.equals("grades"))gradeState=grades==null?"尚无该学期的本地成绩":"本地成绩 · "+stamp(grades.savedAt);else state=schedule==null?"尚无该学期的本地课表":"本地课表 · "+stamp(schedule.savedAt);}
         generation++;busy=false;autoRunning=false;automaticCredentials=null;web.stopLoading();
     }
     void loadSchedule(){
@@ -148,7 +163,15 @@ public class MainActivity extends Activity {
         grades=null;
         try{grades=new Grades(academicStore.load("grades",gradeTerm));gradeState="本地成绩 · 上次更新 "+stamp(grades.savedAt);}catch(Exception e){gradeState="该学期暂无本地成绩 · 联网后获取";}
     }
+    void loadExams(){
+        exams=null;
+        try{exams=new Exams(academicStore.load("exams",examTerm));examState="本地考试安排 · 上次更新 "+stamp(exams.savedAt);}catch(Exception e){examState="尚无该学期的本地考试安排 · 联网后获取";}
+    }
     void learnTerms(JSONObject obj)throws Exception{
+        if(jobKind.equals("exams")){
+            JSONArray catalog=obj.optJSONArray("terms");if(catalog!=null&&catalog.length()>0){examTerms.clear();for(int i=0;i<catalog.length();i++){String name=Term.label(catalog.getString(i));if(!examTerms.contains(name))examTerms.add(name);}prefs.edit().putString("examTerms",new JSONArray(examTerms).toString()).apply();}
+            String resolved=obj.optString("selectedTerm");if(jobTerm.isEmpty()&&!resolved.isEmpty()){jobTerm=Term.label(resolved);examTerm=jobTerm;prefs.edit().putString("examTerm",examTerm).apply();loadExams();render();setState("正在获取考试安排 · 本地记录随时可看");}return;
+        }
         if(jobKind.equals("summary"))return;
         JSONArray catalog=obj.optJSONArray("terms");
         if(catalog!=null&&catalog.length()>0){
@@ -160,7 +183,7 @@ public class MainActivity extends Activity {
             jobTerm=Term.label(resolved);
             if(jobKind.equals("grades")){gradeTerm=jobTerm;prefs.edit().putString("gradeTerm",gradeTerm).apply();loadGrades();}
             else{selectedTerm=jobTerm;prefs.edit().putString("selectedTerm",selectedTerm).apply();loadSchedule();}
-            render();setState("正在获取"+(jobKind.equals("summary")?"汇总":jobKind.equals("grades")?"成绩":"课表")+"…");
+            render();setState("正在获取"+(jobKind.equals("exams")?"考试安排":jobKind.equals("summary")?"汇总":jobKind.equals("grades")?"成绩":"课表")+"…");
         }
     }
     boolean canAutoLogin(){return prefs.getBoolean("autoLogin",true)&&!prefs.getBoolean("autoBlocked",false)&&CredentialStore.exists(this);}
@@ -184,7 +207,7 @@ public class MainActivity extends Activity {
             if(token!=generation||!busy||inBackground)return;
             try{
                 JSONObject data=new JSONObject(result);String kind=data.optString("state");
-                if(kind.equals("success")){automaticCredentials=null;autoRunning=false;authenticated();mainLoaded=false;deadline=SystemClock.elapsedRealtime()+45000;setState("自动登录成功 · 正在获取数据");web.loadUrl(HOME);handler.postDelayed(()->poll(token),600);return;}
+                if(kind.equals("success")){automaticCredentials=null;autoRunning=false;authenticated();mainLoaded=false;deadline=SystemClock.elapsedRealtime()+(jobKind.equals("exams")?120000:45000);setState("自动登录成功 · 正在获取数据");web.loadUrl(HOME);handler.postDelayed(()->poll(token),600);return;}
                 if(kind.equals("ready")){
                     if(data.optBoolean("captcha")){authAttention("学校要求验证码 · 请到个人页完成登录");return;}
                     if(!autoSubmitted){
@@ -198,13 +221,13 @@ public class MainActivity extends Activity {
             }catch(Exception e){authAttention("学校登录页面暂时无法读取 · 请手动登录");}
         });
     }
-    void startPoll(){if(busy)return;busy=true;int token=++generation;deadline=android.os.SystemClock.elapsedRealtime()+45000;setState("正在更新"+(jobKind.equals("summary")?"汇总":jobKind.equals("grades")?"成绩":"课表")+" · 本地记录随时可看");handler.postDelayed(()->poll(token),600);}
+    void startPoll(){if(busy)return;busy=true;int token=++generation;deadline=android.os.SystemClock.elapsedRealtime()+(jobKind.equals("exams")?120000:45000);setState("正在更新"+(jobKind.equals("exams")?"考试安排":jobKind.equals("summary")?"汇总":jobKind.equals("grades")?"成绩":"课表")+" · 本地记录随时可看");handler.postDelayed(()->poll(token),600);}
     void poll(int token){
         if(token!=generation || !busy || inBackground)return;
         if(android.os.SystemClock.elapsedRealtime()>deadline){fail("更新超时 · 已保留本地课表");return;}
         if(loadError){fail("连接失败 · 已保留本地课表");return;}
         if(!mainLoaded || !sourceOrigin(web.getUrl())){handler.postDelayed(()->poll(token),700);return;}
-        String query=portalScript+"("+token+","+JSONObject.quote(jobKind)+","+JSONObject.quote(jobTerm)+","+parserScript+")";
+        String query=jobKind.equals("exams")?examPortalScript+"("+token+","+JSONObject.quote(jobTerm)+","+parserScript+")":portalScript+"("+token+","+JSONObject.quote(jobKind)+","+JSONObject.quote(jobTerm)+","+parserScript+")";
         web.evaluateJavascript(query,result->{
             if(token!=generation || !busy)return;
             try {
@@ -219,7 +242,9 @@ public class MainActivity extends Activity {
                 }
                 if(jobKind.equals("summary")?!obj.optString("scope").equals("all"):(jobTerm.isEmpty()||!Term.same(jobTerm,obj.getString("term"))))throw new IllegalArgumentException("学期不匹配");
                 obj.put("savedAt",System.currentTimeMillis());obj.put("source","school-sync");
-                if(jobKind.equals("summary")){
+                if(jobKind.equals("exams")){
+                    Exams fresh=new Exams(obj);academicStore.save("exams",obj);exams=fresh;examState="已保存到本地 · "+stamp(fresh.savedAt);
+                }else if(jobKind.equals("summary")){
                     Grades fresh=new Grades(obj);academicStore.save("summary",obj);summaryGrades=fresh;summaryState="已保存到本地 · "+stamp(fresh.savedAt);
                 }else if(jobKind.equals("grades")){
                     Grades fresh=new Grades(obj);academicStore.save("grades",obj);grades=fresh;
@@ -232,16 +257,17 @@ public class MainActivity extends Activity {
             }catch(Exception e){fail("数据格式变化或保存失败 · 已保留上次记录");}
         });
     }
-    void setState(String s){if(jobKind.equals("summary"))summaryState=s.replace("本地课表","本地汇总");else if(jobKind.equals("grades"))gradeState=s.replace("本地课表","本地成绩");else state=s;if(stateText!=null)stateText.setText(page==3?gradeState:state);if(authStatusText!=null)authStatusText.setText(authStatus());refreshSummary();}
-    void fail(String reason){automaticCredentials=null;autoRunning=false;busy=false;generation++;if(jobKind.equals("summary")?summaryGrades==null:jobKind.equals("grades")?grades==null:schedule==null)reason=reason.replace("已保留本地课表","暂无缓存，可稍后重试").replace("已保留上次记录","暂无缓存，可稍后重试");setState(reason);}
+    void setState(String s){if(jobKind.equals("exams"))examState=s.replace("本地课表","本地考试安排");else if(jobKind.equals("summary"))summaryState=s.replace("本地课表","本地汇总");else if(jobKind.equals("grades"))gradeState=s.replace("本地课表","本地成绩");else state=s;if(stateText!=null)stateText.setText(page==4?examState:page==3?gradeState:state);if(authStatusText!=null)authStatusText.setText(authStatus());refreshSummary();}
+    void fail(String reason){automaticCredentials=null;autoRunning=false;busy=false;generation++;if(jobKind.equals("exams")?exams==null:jobKind.equals("summary")?summaryGrades==null:jobKind.equals("grades")?grades==null:schedule==null)reason=reason.replace("已保留本地课表","暂无缓存，可稍后重试").replace("已保留上次记录","暂无缓存，可稍后重试");setState(reason);}
     void showLogin(){if(credentialBusy)return;generation++;busy=false;automaticCredentials=null;autoRunning=false;web.stopLoading();verified=false;startActivityForResult(new Intent(this,LoginActivity.class),20);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==30 && result==RESULT_OK && data!=null && data.getData()!=null){importWallpaper(data.getData());}
+        if(request==31){imageBusy=false;if(result==RESULT_OK){followBackgroundTheme();refreshAppearance();render();Toast.makeText(this,"裁切壁纸已保存",Toast.LENGTH_SHORT).show();}}
         if(request==20 && result==RESULT_OK){authenticated();handler.post(()->{if(!inBackground)sync();});}}
     PopupWindow moreMenu;
     void showMenu(View anchor){
         if(page!=1)return;
         if(moreMenu!=null && moreMenu.isShowing()){moreMenu.dismiss();return;}
-        moreMenu=MoreMenu.show(this,anchor,palette,id->{switch(id){case 1:cancelSync();sync();break;case 2:selectedWeek=currentWeek();page=1;render();break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;}});
+        moreMenu=MoreMenu.show(this,anchor,palette,id->{switch(id){case 1:cancelSync();sync();break;case 2:changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;}});
     }
     void refreshAppearance(){
         wallpaper=WallpaperStore.load(this);int primary=prefs.getBoolean("manualTheme",false)?prefs.getInt("manualThemeColor",0xff2ecbff):backgroundPrimary();
@@ -249,13 +275,13 @@ public class MainActivity extends Activity {
         prefs.edit().putInt("themeColor",PRIMARY).apply();
     }
     int backgroundPrimary(){return wallpaper==null?0xff2ecbff:WallpaperStore.dominant(wallpaper);}
-    void chooseWallpaper(){if(imageBusy)return;Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);pick.setType("image/*");pick.addCategory(Intent.CATEGORY_OPENABLE);pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);try{startActivityForResult(pick,30);}catch(ActivityNotFoundException e){Toast.makeText(this,"手机上没有可用的图片选择器",Toast.LENGTH_LONG).show();}}
+    void chooseWallpaper(){if(imageBusy)return;if(weekHost!=null&&weekHost.getWidth()>0&&weekHost.getHeight()>0)wallpaperAspect=weekHost.getWidth()/(float)weekHost.getHeight();Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);pick.setType("image/*");pick.addCategory(Intent.CATEGORY_OPENABLE);pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);try{startActivityForResult(pick,30);}catch(ActivityNotFoundException e){Toast.makeText(this,"手机上没有可用的图片选择器",Toast.LENGTH_LONG).show();}}
     void importWallpaper(Uri uri){
-        if(imageBusy)return;imageBusy=true;Toast.makeText(this,"正在设置背景…",Toast.LENGTH_SHORT).show();
-        images.execute(()->{try{WallpaperStore.save(this,uri);followBackgroundTheme();handler.post(()->{if(isDestroyed())return;imageBusy=false;refreshAppearance();render();Toast.makeText(this,"背景已保存，已应用新背景主色",Toast.LENGTH_SHORT).show();});}catch(Exception|OutOfMemoryError e){handler.post(()->{if(isDestroyed())return;imageBusy=false;Toast.makeText(this,"这张图片无法读取，请换一张较小的图片",Toast.LENGTH_LONG).show();});}});
+        if(imageBusy)return;imageBusy=true;float aspect=weekHost!=null&&weekHost.getWidth()>0&&weekHost.getHeight()>0?weekHost.getWidth()/(float)weekHost.getHeight():wallpaperAspect;
+        try{startActivityForResult(new Intent(this,WallpaperCropActivity.class).setData(uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).putExtra("aspect",aspect),31);}catch(ActivityNotFoundException e){imageBusy=false;Toast.makeText(this,"裁切页面暂时无法打开",Toast.LENGTH_LONG).show();}
     }
     void followBackgroundTheme(){prefs.edit().putBoolean("manualTheme",false).remove("manualThemeColor").apply();}
-    void restoreWallpaper(){if(imageBusy)return;WallpaperStore.clear(this);followBackgroundTheme();refreshAppearance();render();Toast.makeText(this,"已恢复默认背景与蓝色主题",Toast.LENGTH_SHORT).show();}
+    void restoreWallpaper(){if(imageBusy)return;WallpaperStore.clear(this);prefs.edit().remove("wallpaperUserCrop").apply();followBackgroundTheme();refreshAppearance();render();Toast.makeText(this,"已恢复默认背景与蓝色主题",Toast.LENGTH_SHORT).show();}
     int textOn(int background){return ThemePalette.neutralText(background);}
     LocalDate today(){return LocalDate.now(ZoneId.of("Asia/Shanghai"));}
     Schedule activeSchedule(){return schedule==null?(selectedTerm.isEmpty()?localSchedule:Schedule.local(selectedTerm)):schedule;}
@@ -264,55 +290,113 @@ public class MainActivity extends Activity {
     LocalDate anchor(){try{return LocalDate.parse(prefs.getString(anchorKey(),""));}catch(Exception e){return null;}}
     int currentWeek(){LocalDate a=anchor();if(a==null)return 1;long w=ChronoUnit.DAYS.between(a,today())/7+1;if(today().isBefore(a))return 1;return (int)Math.max(1,Math.min(maxWeek(),w));}
     void calibrate(){new CalibrationSheet(this);}
-    void switchPage(int target){if(target==page)return;transitionFrom=page;page=target;render();transitionFrom=-1;}
+    void switchPage(int target){if(target==page)return;if(page==4)cancelSync();handler.removeCallbacks(examClock);transitionFrom=page;page=target;render();transitionFrom=-1;if(page==4)handler.postDelayed(examClock,30000);}
     void render(){
+        finishWeekTransition();weekHost=null;
         if(pageAnimator!=null){pageAnimator.cancel();pageAnimator=null;}
         visibleCards.clear();selectedWeek=Math.max(1,Math.min(selectedWeek,maxWeek()));
         if(moreMenu!=null && moreMenu.isShowing())moreMenu.dismiss();
         root.setBackgroundColor(BG);AppTheme.applySystemBars(this,palette);
         if(screen!=null)root.removeView(screen);authStatusText=null;
         screen=column();screen.setPadding(dp(10),dp(3),dp(10),dp(3));root.addView(screen,new FrameLayout.LayoutParams(-1,-1));
-        LinearLayout mast=row();mast.setMinimumHeight(dp(48));LinearLayout brand=column();brand.addView(label(page==3?"成绩":page==2?"个人":"三角狐",25,INK,true));mast.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout mast=row();mast.setMinimumHeight(dp(48));LinearLayout brand=column();brand.addView(label(page==4?"考试查询":page==3?"成绩":page==2?"个人":"三角狐",25,INK,true));mast.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
         if(page==2)mast.addView(iconButton("关于",16,()->startActivity(new Intent(this,AboutActivity.class))),new LinearLayout.LayoutParams(dp(48),dp(48)));
-        if(page==3)mast.addView(themedButton("返回首页",()->switchPage(0),false),new LinearLayout.LayoutParams(-2,dp(40)));
+        if(page==3||page==4)mast.addView(themedButton("返回首页",()->switchPage(0),false),new LinearLayout.LayoutParams(-2,dp(40)));
         if(page==1){TextView menu=label("⋮",28,ACCENT_TEXT,true);menu.setGravity(Gravity.CENTER);menu.setContentDescription("更多选项");menu.setFocusable(true);menu.setOnClickListener(v->showMenu(v));mast.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48)));}screen.addView(mast);
         LinearLayout pageContent=column();screen.addView(pageContent,new LinearLayout.LayoutParams(-1,0,1));
-        TextView term=label(page==1?(selectedTerm.isEmpty()?"选择学期":selectedTerm)+" ⌄":page==3?(gradeTerm.isEmpty()?"选择学期":gradeTerm)+" ⌄":page==0?"悠悠不山山 含含是散散":"教务账号与本机设置",12,MUTED,false);term.setPadding(dp(8),0,dp(8),dp(5));
+        TextView term=label(page==4?(examTerm.isEmpty()?"学校当前学期":examTerm)+" ⌄":page==1?(selectedTerm.isEmpty()?"选择学期":selectedTerm)+" ⌄":page==3?(gradeTerm.isEmpty()?"选择学期":gradeTerm)+" ⌄":page==0?"悠悠不山山 含含是散散":"教务账号与本机设置",12,MUTED,false);term.setPadding(dp(8),0,dp(8),dp(5));
         if(page==1||page==3){term.setTextColor(palette.deepAccent);term.setMinHeight(dp(40));term.setGravity(Gravity.CENTER_VERTICAL);term.setBackground(shape(palette.entrySurface,12));term.setOnClickListener(v->chooseSemester(page==3));term.setFocusable(true);term.setContentDescription("选择学期，"+(page==3?gradeTerm:selectedTerm));}
+        if(page==4){term.setTextColor(palette.deepAccent);term.setMinHeight(dp(40));term.setGravity(Gravity.CENTER_VERTICAL);term.setBackground(shape(palette.entrySurface,12));term.setOnClickListener(v->chooseExamTerm());term.setFocusable(true);}
         pageContent.addView(term,new LinearLayout.LayoutParams(-1,-2));
         if(page==1){
-            LinearLayout weekBar=row();TextView prev=button("‹",()->{if(selectedWeek>1){selectedWeek--;render();}});prev.setContentDescription("上一周");weekBar.addView(prev,new LinearLayout.LayoutParams(dp(44),dp(44)));
-            String mid="第 "+selectedWeek+" 周";LocalDate a=anchor();
-            if(a!=null)mid+="  ·  "+a.plusWeeks(selectedWeek-1).format(DateTimeFormatter.ofPattern("M/d"))+"—"+a.plusWeeks(selectedWeek-1).plusDays(6).format(DateTimeFormatter.ofPattern("M/d"));else mid+="  ·  待校准";
-            weekBar.addView(button(mid,()->chooseWeek()),new LinearLayout.LayoutParams(0,dp(44),1));TextView next=button("›",()->{if(selectedWeek<maxWeek()){selectedWeek++;render();}});next.setContentDescription("下一周");weekBar.addView(next,new LinearLayout.LayoutParams(dp(44),dp(44)));pageContent.addView(weekBar);
-            pageContent.addView(weekView(),new LinearLayout.LayoutParams(-1,0,1));
+            LinearLayout weekBar=row();previousWeekButton=button("‹",()->changeWeek(selectedWeek-1));previousWeekButton.setContentDescription("上一周");weekBar.addView(previousWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));
+            weekTitle=button("",()->chooseWeek());weekTitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);weekBar.addView(weekTitle,new LinearLayout.LayoutParams(0,dp(44),1));nextWeekButton=button("›",()->changeWeek(selectedWeek+1));nextWeekButton.setContentDescription("下一周");weekBar.addView(nextWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));pageContent.addView(weekBar);updateWeekTitle();
+            weekHost=new WeekSwipeLayout(this,new WeekSwipeLayout.Listener(){public void drag(float offset){dragWeek(offset);}public void release(int direction){releaseWeek(direction);}});weekHost.addView(weekView(),new FrameLayout.LayoutParams(-1,-1));pageContent.addView(weekHost,new LinearLayout.LayoutParams(-1,0,1));
         }else{
-            ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.addView(page==0?homeView():page==3?gradesView():userView());pageContent.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+            ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.addView(page==0?homeView():page==4?examsView():page==3?gradesView():userView());pageContent.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         }
-        stateText=label(page==3?gradeState:state,10,MUTED,false);stateText.setPadding(dp(2),dp(5),dp(2),dp(4));stateText.setMaxLines(2);screen.addView(stateText);
+        stateText=label(page==4?examState:page==3?gradeState:state,10,MUTED,false);stateText.setPadding(dp(2),dp(5),dp(2),dp(4));stateText.setMaxLines(2);screen.addView(stateText);
         LinearLayout nav=row();nav.setPadding(dp(5),dp(3),dp(5),dp(3));nav.setBackground(shape(palette.sheetSurface,22));
         final GradientDrawable[] tabBackgrounds=new GradientDrawable[3];final MoreMenu.Icon[] tabIcons=new MoreMenu.Icon[3];final TextView[] tabLabels=new TextView[3];
         String[] titles={"首页","课程","个人"};for(int i=0;i<3;i++){
-            final int target=i;boolean selected=(page==3?0:page)==i;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(3),0,dp(3));item.setBaselineAligned(false);tabBackgrounds[i]=shape(selected?palette.selectedSurface:Color.TRANSPARENT,16);item.setBackground(tabBackgrounds[i]);
+            final int target=i;boolean selected=(page>=3?0:page)==i;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(3),0,dp(3));item.setBaselineAligned(false);tabBackgrounds[i]=shape(selected?palette.selectedSurface:Color.TRANSPARENT,16);item.setBackground(tabBackgrounds[i]);
             MoreMenu.Icon icon=new MoreMenu.Icon(this,i+2,selected?INK:MUTED);item.addView(icon,new LinearLayout.LayoutParams(dp(32),dp(30)));TextView navLabel=label(titles[i],11,selected?INK:MUTED,selected);navLabel.setGravity(Gravity.CENTER);navLabel.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);navLabel.setIncludeFontPadding(false);navLabel.setSingleLine(true);item.addView(navLabel,new LinearLayout.LayoutParams(-1,dp(18)));item.setSelected(selected);item.setContentDescription(titles[i]+(selected?"，已选中":""));item.setFocusable(true);tabIcons[i]=icon;tabLabels[i]=navLabel;item.setOnClickListener(v->switchPage(target));nav.addView(item,new LinearLayout.LayoutParams(0,dp(54),1));
         }screen.addView(nav,new LinearLayout.LayoutParams(-1,dp(60)));
         if(transitionFrom>=0&&android.animation.ValueAnimator.areAnimatorsEnabled()){
-            final int from=transitionFrom==3?0:transitionFrom,to=page==3?0:page;final int selectedColor=palette.selectedSurface;final float offset=dp(10)*(to>from?1:-1);
+            final int from=transitionFrom>=3?0:transitionFrom,to=page>=3?0:page;final int selectedColor=palette.selectedSurface;final float offset=dp(10)*(to>from?1:-1);
             android.animation.ArgbEvaluator evaluator=new android.animation.ArgbEvaluator();pageAnimator=android.animation.ValueAnimator.ofFloat(0,1);pageAnimator.setDuration(200);pageAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
             pageAnimator.addUpdateListener(animation->{float t=(Float)animation.getAnimatedValue();pageContent.setAlpha(.2f+.8f*t);pageContent.setTranslationX(offset*(1-t));for(int i=0;i<3;i++){tabBackgrounds[i].setColor((Integer)evaluator.evaluate(t,i==from?selectedColor:selectedColor&0xffffff,i==to?selectedColor:selectedColor&0xffffff));int color=(Integer)evaluator.evaluate(t,i==from?INK:MUTED,i==to?INK:MUTED);tabIcons[i].setColor(color);tabLabels[i].setTextColor(color);}});pageAnimator.start();
         }
     }
-    @Override public void onBackPressed(){if(page==3){switchPage(0);return;}super.onBackPressed();}
+    @Override public void onBackPressed(){if(page>=3){switchPage(0);return;}super.onBackPressed();}
+    void updateWeekTitle(){
+        String mid="第 "+selectedWeek+" 周";LocalDate a=anchor();
+        if(a!=null)mid+="  ·  "+a.plusWeeks(selectedWeek-1).format(DateTimeFormatter.ofPattern("M/d"))+"—"+a.plusWeeks(selectedWeek-1).plusDays(6).format(DateTimeFormatter.ofPattern("M/d"));else mid+="  ·  待校准";
+        weekTitle.setText(mid);previousWeekButton.setEnabled(selectedWeek>1);previousWeekButton.setAlpha(selectedWeek>1?1:.35f);nextWeekButton.setEnabled(selectedWeek<maxWeek());nextWeekButton.setAlpha(selectedWeek<maxWeek()?1:.35f);
+    }
+    void finishWeekTransition(){
+        if(weekAnimator!=null){weekAnimator.removeAllUpdateListeners();weekAnimator.removeAllListeners();weekAnimator.cancel();weekAnimator=null;}
+        if(weekHost!=null&&weekHost.getChildCount()>0){
+            weekHost.transitioning=false;boolean commit=previewWeek!=0&&previewWeek==selectedWeek;
+            View current=weekHost.getChildAt(commit?weekHost.getChildCount()-1:0);
+            for(int i=weekHost.getChildCount()-1;i>=0;i--)if(weekHost.getChildAt(i)!=current)weekHost.removeViewAt(i);
+            if(previewWeek!=0&&!commit){visibleCards.clear();visibleCards.addAll(previousCards);}
+            current.setTranslationX(0);current.setAlpha(1);current.setScaleX(1);current.setScaleY(1);current.setLayerType(View.LAYER_TYPE_NONE,null);current.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        }
+        previewWeek=0;queuedWeek=0;weekProgress=0;previousCards.clear();
+    }
+    void changeWeek(int requested){
+        int target=WeekSwipeGesture.target(selectedWeek,requested,maxWeek());if(page!=1||target==selectedWeek||weekHost==null)return;
+        if(weekAnimator!=null){queuedWeek=target;return;}
+        finishWeekTransition();prepareWeek(target);settleWeek(true);
+    }
+    void prepareWeek(int target){
+        previewWeek=target;previousCards.clear();previousCards.addAll(visibleCards);visibleCards.clear();
+        int current=selectedWeek;selectedWeek=target;View next=weekView();selectedWeek=current;
+        weekHost.addView(next,new FrameLayout.LayoutParams(-1,-1));
+        // Measure once before movement, then animate cached layers without relaying out cards.
+        int w=weekHost.getWidth(),h=weekHost.getHeight();next.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(h,View.MeasureSpec.EXACTLY));next.layout(0,0,w,h);
+        for(int i=0;i<weekHost.getChildCount();i++){View v=weekHost.getChildAt(i);v.setLayerType(View.LAYER_TYPE_HARDWARE,null);v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);}
+        moveWeek(0,target>current?1:-1);
+    }
+    void moveWeek(float progress,int direction){
+        weekProgress=progress;if(weekHost==null||weekHost.getChildCount()<2)return;
+        float distance=weekHost.getWidth()*direction;View old=weekHost.getChildAt(0),next=weekHost.getChildAt(1);
+        old.setTranslationX(-distance*progress);next.setTranslationX(distance*(1-progress));
+        old.setAlpha(1-.12f*progress);next.setAlpha(.88f+.12f*progress);
+    }
+    void dragWeek(float offset){
+        if(weekHost==null||weekAnimator!=null||!android.animation.ValueAnimator.areAnimatorsEnabled())return;
+        int direction=offset<0?1:-1,target=WeekSwipeGesture.target(selectedWeek,selectedWeek+direction,maxWeek());
+        if(previewWeek!=0&&previewWeek!=target)finishWeekTransition();
+        if(target==selectedWeek){weekHost.getChildAt(0).setTranslationX(Math.max(-dp(24),Math.min(dp(24),offset*.15f)));return;}
+        if(previewWeek==0)prepareWeek(target);
+        moveWeek(Math.min(.98f,Math.abs(offset)/Math.max(1,weekHost.getWidth())),direction);
+    }
+    void releaseWeek(int direction){
+        if(weekHost==null||weekAnimator!=null)return;
+        if(previewWeek==0){finishWeekTransition();if(direction!=0)changeWeek(selectedWeek+direction);return;}
+        settleWeek(direction!=0&&Integer.signum(previewWeek-selectedWeek)==direction);
+    }
+    void settleWeek(boolean commit){
+        final int direction=previewWeek>selectedWeek?1:-1;final float start=weekProgress,end=commit?1:0;
+        if(commit){selectedWeek=previewWeek;updateWeekTitle();}
+        if(!android.animation.ValueAnimator.areAnimatorsEnabled()||weekHost.getWidth()==0){finishWeekTransition();return;}
+        weekHost.transitioning=true;weekAnimator=android.animation.ValueAnimator.ofFloat(start,end);
+        weekAnimator.setDuration((long)(180+180*Math.abs(end-start)));weekAnimator.setInterpolator(new android.view.animation.PathInterpolator(.22f,1f,.36f,1f));
+        weekAnimator.addUpdateListener(a->moveWeek((Float)a.getAnimatedValue(),direction));
+        weekAnimator.addListener(new android.animation.AnimatorListenerAdapter(){@Override public void onAnimationEnd(android.animation.Animator a){int pending=queuedWeek;finishWeekTransition();if(pending!=0)changeWeek(pending);}});weekAnimator.start();
+    }
     void chooseWeek(){
         UiSheet sheet=new UiSheet(this,"选择教学周",activeSchedule().term,.69f);
         int current=currentWeek();
         for(int start=1;start<=maxWeek();start+=4){LinearLayout line=row();
             for(int i=0;i<4;i++){final int week=start+i;LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,dp(48),1);if(i>0)cell.leftMargin=dp(8);
                 if(week>maxWeek()){line.addView(new View(this),cell);continue;}
-                TextView choice=themedButton("第 "+week+" 周",()->{selectedWeek=week;sheet.dialog.dismiss();render();},week==selectedWeek);choice.setPadding(0,0,0,0);choice.setSelected(week==selectedWeek);choice.setContentDescription("第 "+week+" 周"+(week==selectedWeek?"，已选中":"")+(week==current?"，当前周":""));line.addView(choice,cell);
+                TextView choice=themedButton("第 "+week+" 周",()->{sheet.dialog.dismiss();changeWeek(week);},week==selectedWeek);choice.setPadding(0,0,0,0);choice.setSelected(week==selectedWeek);choice.setContentDescription("第 "+week+" 周"+(week==selectedWeek?"，已选中":"")+(week==current?"，当前周":""));line.addView(choice,cell);
             }sheet.body.addView(line);space(sheet.body,10);
         }
-        sheet.actions(this,"回到本周",()->{selectedWeek=currentWeek();sheet.dialog.dismiss();render();});showSheet(sheet);
+        sheet.actions(this,"回到本周",()->{sheet.dialog.dismiss();changeWeek(currentWeek());});showSheet(sheet);
     }
     void chooseSemester(boolean forGrades){
         UiSheet sheet=new UiSheet(this,"选择学期","选择后联网更新 · 各学期独立保存",.73f);
@@ -329,6 +413,44 @@ public class MainActivity extends Activity {
     }
     void openGrades(){
         if(gradeTerm.isEmpty())gradeTerm=selectedTerm;loadGrades();cancelSync();switchPage(3);sync();
+    }
+    void openExams(){cancelSync();loadExams();switchPage(4);sync();}
+    void chooseExamTerm(){
+        UiSheet sheet=new UiSheet(this,"考试学期","各学期独立保存 · 自动合并所有考试轮次",.72f);
+        if(examTerms.isEmpty())sheet.body.addView(label("联网获取后可选择学校开放的学期。",14,MUTED,false));
+        for(int i=examTerms.size()-1;i>=0;i--){final String name=examTerms.get(i);boolean chosen=Term.same(name,examTerm);
+            TextView choice=themedButton(name+(chosen?"  ✓":""),()->{sheet.dialog.dismiss();cancelSync();examTerm=name;prefs.edit().putString("examTerm",name).apply();loadExams();render();sync();},chosen);
+            choice.setTextSize(14);sheet.body.addView(choice,new LinearLayout.LayoutParams(-1,dp(50)));space(sheet.body,9);
+        }
+        sheet.actions(this,"学校当前学期",()->{sheet.dialog.dismiss();cancelSync();examTerm="";prefs.edit().remove("examTerm").apply();loadExams();render();sync();});showSheet(sheet);
+    }
+    View examsView(){
+        examBadges.clear();examBadgeEntries.clear();
+        LinearLayout content=column();content.setPadding(dp(6),dp(14),dp(6),dp(18));
+        LinearLayout summary=panel(),heading=row(),words=column();ZonedDateTime now=ZonedDateTime.now(Exams.ZONE);int pending=0;
+        if(exams!=null)for(Exams.Entry e:exams.entries)if(!e.finished(now))pending++;
+        examPendingTitle=label(exams==null?"考试安排":pending+" 门待考",22,INK,true);words.addView(examPendingTitle);space(words,6);
+        words.addView(label(exams==null?"获取后离线也能查看":"共 "+exams.entries.size()+" 门 · 按考试时间排列",12,MUTED,false));heading.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+        heading.addView(iconButton("刷新考试安排",1,()->{cancelSync();sync();}),new LinearLayout.LayoutParams(dp(44),dp(44)));summary.addView(heading);content.addView(summary);space(content,14);
+        if(exams==null||exams.entries.isEmpty()){
+            LinearLayout empty=panel();empty.setPadding(dp(20),dp(36),dp(20),dp(36));TextView title=label(exams==null?"等待获取考试安排":"该学期暂无考试安排",18,INK,true);title.setGravity(Gravity.CENTER);empty.addView(title);space(empty,12);
+            TextView note=label(exams==null?"使用教务账号登录后自动获取。\n已有记录会先显示，刷新失败仍可查看。":"学校尚未发布考试，或本学期没有安排。\n可稍后刷新，或切换其他学期。",13,MUTED,false);note.setGravity(Gravity.CENTER);note.setLineSpacing(dp(5),1);empty.addView(note);content.addView(empty);
+            if(exams==null&&!prefs.getBoolean("loginCompleted",false)&&!canAutoLogin()){space(content,12);content.addView(themedButton("登录教务账号",()->showLogin(),true),new LinearLayout.LayoutParams(-1,dp(48)));}
+        }else for(Exams.Entry e:exams.ordered(now)){
+            LinearLayout card=panel();card.setPadding(dp(17),dp(18),dp(17),dp(18));LinearLayout first=row();
+            LinearLayout details=column();TextView name=label(e.name.replaceFirst("^\\[[^\\]]+\\]\\s*",""),16,INK,true);name.setLineSpacing(dp(3),1);details.addView(name);space(details,9);
+            TextView time=label(e.rawTime.isEmpty()?"考试时间待公布":e.rawTime,12,palette.deepAccent,true);time.setLineSpacing(dp(3),1);details.addView(time);first.addView(details,new LinearLayout.LayoutParams(0,-2,1));
+            TextView badge=label("",13,Color.WHITE,true);badge.setGravity(Gravity.CENTER);badge.setIncludeFontPadding(false);badge.setLineSpacing(dp(4),1);badge.setPadding(dp(3),dp(5),dp(3),dp(5));
+            LinearLayout.LayoutParams box=new LinearLayout.LayoutParams(dp(66),dp(66));box.leftMargin=dp(12);first.addView(badge,box);examBadges.add(badge);examBadgeEntries.add(e);card.addView(first);space(card,13);
+            card.addView(label("地点 · "+(e.room.isEmpty()?"待公布":e.room),13,MUTED,false));space(card,7);card.addView(label("座位 · "+(e.seat.isEmpty()||e.seat.matches("\\*+")?"待公布":e.seat),12,MUTED,false));
+            if(!e.note.isEmpty()){space(card,7);card.addView(label("备注 · "+e.note,12,MUTED,false));}content.addView(card);space(content,11);
+        }
+        updateExamBadges();space(content,8);content.addView(label("考试安排以学校最新发布为准；倒计时按北京时间计算。",11,MUTED,false));return content;
+    }
+    void updateExamBadges(){
+        ZonedDateTime now=ZonedDateTime.now(Exams.ZONE);
+        if(exams!=null&&examPendingTitle!=null){int pending=0;for(Exams.Entry e:exams.entries)if(!e.finished(now))pending++;examPendingTitle.setText(pending+" 门待考");}
+        for(int i=0;i<examBadges.size();i++){TextView badge=examBadges.get(i);Exams.Entry e=examBadgeEntries.get(i);badge.setText(e.badge(now));badge.setBackground(shape(e.finished(now)?0xff237d50:e.date==null?0xff64748b:0xffc83b48,12));badge.setContentDescription(e.name+"，"+e.badge(now).replace('\n',' '));}
     }
     View gradesView(){
         LinearLayout content=column();content.setPadding(dp(6),dp(14),dp(6),dp(18));
@@ -382,12 +504,12 @@ public class MainActivity extends Activity {
     void space(LinearLayout parent,int size){parent.addView(new View(this),new LinearLayout.LayoutParams(1,dp(size)));}
     View homeView(){
         LinearLayout content=column();content.setPadding(dp(6),dp(16),dp(6),dp(18));TextView heading=label("常用入口",17,INK,true);content.addView(heading);space(content,14);
-        LinearLayout top=row();top.addView(homeEntry("自定义课程","添加与管理",8,()->showCustomCourses()),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams spacer=new LinearLayout.LayoutParams(0,-2,1);spacer.leftMargin=dp(12);top.addView(homeEntry("成绩查看","按学期查看",11,()->openGrades()),spacer);content.addView(top);
-        space(content,12);
-        LinearLayout campus=row();campus.addView(homeEntry("校园地图","探索校园",13,()->openCampusMap()),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams calendarSpace=new LinearLayout.LayoutParams(0,-2,1);calendarSpace.leftMargin=dp(12);campus.addView(homeEntry("校历","2026—2027 学年",14,()->startActivity(new Intent(this,AcademicCalendarActivity.class))),calendarSpace);content.addView(campus);
-        space(content,12);LinearLayout services=row();services.addView(homeEntry("网上报修","校园后勤服务",15,()->openIdentity(true)),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams electricitySpace=new LinearLayout.LayoutParams(0,-2,1);electricitySpace.leftMargin=dp(12);services.addView(homeEntry("电费","电量查询 · 在线缴费",17,()->openElectricity()),electricitySpace);content.addView(services);
-        space(content,12);LinearLayout labs=row();labs.addView(homeEntry("大物实验报告","需连接校园网",18,()->openPhysicsLab()),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams labSpace=new LinearLayout.LayoutParams(0,1,1);labSpace.leftMargin=dp(12);labs.addView(new View(this),labSpace);content.addView(labs);return content;
+        String[] titles={"考试查询","自定义课程","成绩查看","校园地图","校历","网上报修","电费","大物实验报告"};
+        String[] subtitles={"考试安排 · 倒计时","添加与管理","按学期查看","探索校园","2026—2027 学年","校园后勤服务","电量查询 · 在线缴费","需连接校园网"};
+        int[] icons={19,8,11,13,14,15,17,18};Runnable[] actions={()->openExams(),()->showCustomCourses(),()->openGrades(),()->openCampusMap(),()->startActivity(new Intent(this,AcademicCalendarActivity.class)),()->openIdentity(true),()->openElectricity(),()->openPhysicsLab()};
+        for(int i=0;i<titles.length;i+=2){LinearLayout line=row();for(int j=i;j<i+2;j++){LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-2,1);if(j>i)cell.leftMargin=dp(12);line.addView(homeEntry(titles[j],subtitles[j],icons[j],actions[j]),cell);}content.addView(line);if(i+2<titles.length)space(content,12);}return content;
     }
+
     void openCampusMap(){
         startActivity(new Intent(this,CampusMapActivity.class));
     }
@@ -455,7 +577,7 @@ public class MainActivity extends Activity {
     }
     int courseColor(Course c){String key="course-color:"+c.name;int index=prefs.getInt(key,-1);if(index<0){index=prefs.getInt("next-course-color",0);prefs.edit().putInt(key,index).putInt("next-course-color",index+1).apply();}return CourseColors.PALETTE[Math.floorMod(index,CourseColors.PALETTE.length)];}
     View weekView(){
-        WeekGridView grid=new WeekGridView(this,dp(33),dp(32),dp(14));grid.setBackground(wallpaper==null?shape(palette.gridSurface,12):new WallpaperDrawable(wallpaper,dp(33),dp(32),palette.gridSurface,palette.wallpaperScrim));
+        WeekGridView grid=new WeekGridView(this,dp(33),dp(32),dp(14));grid.setBackground(wallpaper==null?shape(palette.gridSurface,12):new WallpaperDrawable(wallpaper,dp(33),dp(32),palette.gridSurface,palette.wallpaperScrim,prefs.getBoolean("wallpaperUserCrop",false)));
         String[] days={"一","二","三","四","五","六","日"};LocalDate a=anchor();
         LocalDate monday=a==null?today().minusDays(today().getDayOfWeek().getValue()-1).plusWeeks(selectedWeek-currentWeek()):a.plusWeeks(selectedWeek-1);
         for(int d=1;d<=7;d++){
@@ -490,7 +612,7 @@ public class MainActivity extends Activity {
     void styleCourseCard(CourseCardView card,int color,int transparency){card.setBackground(shape(CourseAppearance.background(color,transparency),6));card.setAppearance(color,transparency,BG);}
     void showTransparency(){
         UiSheet sheet=new UiSheet(this,"课程透明度","只调整课程底色，文字自动适应背景明暗",.56f);LinearLayout body=sheet.body;int initial=transparency();final int[] value={initial};
-        FrameLayout preview=new FrameLayout(this);preview.setBackground(wallpaper==null?shape(palette.controlSurface,18):new WallpaperDrawable(wallpaper,0,0,BG,palette.wallpaperScrim));preview.setClipToOutline(true);
+        FrameLayout preview=new FrameLayout(this);preview.setBackground(wallpaper==null?shape(palette.controlSurface,18):new WallpaperDrawable(wallpaper,0,0,BG,palette.wallpaperScrim,prefs.getBoolean("wallpaperUserCrop",false)));preview.setClipToOutline(true);
         LinearLayout examples=row();examples.setPadding(dp(16),dp(15),dp(16),dp(15));preview.addView(examples,new FrameLayout.LayoutParams(-1,-1));CourseCardView[] cards=new CourseCardView[3];String[] names={"高等数学\n教学楼 A101","大学英语\n教学楼 B202","自定义课程\n图书馆"};for(int i=0;i<3;i++){CourseCardView c=new CourseCardView(this);c.setText(names[i]);c.setTextSize(12);c.setGravity(Gravity.CENTER);c.setPadding(dp(5),dp(5),dp(5),dp(5));c.setIncludeFontPadding(false);c.setTag(CourseColors.PALETTE[i]);cards[i]=c;styleCourseCard(c,CourseColors.PALETTE[i],initial);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);if(i>0)lp.leftMargin=dp(8);examples.addView(c,lp);}body.addView(preview,new LinearLayout.LayoutParams(-1,dp(116)));space(body,15);
         TextView percent=label("透明度 "+initial+"%",16,INK,true);percent.setGravity(Gravity.CENTER);body.addView(percent,new LinearLayout.LayoutParams(-1,-2));SeekBar slider=new SeekBar(this);slider.setMax(100);slider.setProgress(initial);slider.setProgressTintList(android.content.res.ColorStateList.valueOf(PRIMARY));slider.setThumbTintList(android.content.res.ColorStateList.valueOf(PRIMARY));slider.setContentDescription("课程卡片透明度，百分之零为不透明，百分之一百为底色完全透明");body.addView(slider,new LinearLayout.LayoutParams(-1,dp(44)));
         LinearLayout ends=row();TextView solid=label("不透明",11,MUTED,false),clear=label("全透明",11,MUTED,false);ends.addView(solid,new LinearLayout.LayoutParams(0,-2,1));clear.setGravity(Gravity.RIGHT);ends.addView(clear,new LinearLayout.LayoutParams(0,-2,1));body.addView(ends);space(body,12);
