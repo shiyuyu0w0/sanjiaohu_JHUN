@@ -2,6 +2,6 @@ plugins { id 'com.android.application' }
 android {
     namespace 'cn.jhun.sanjiaohu'
     compileSdk 36
-    defaultConfig { applicationId 'cn.jhun.sanjiaohu'; minSdk 26; targetSdk 35; versionCode 45; versionName '1.1.2' }
+    defaultConfig { applicationId 'cn.jhun.sanjiaohu'; minSdk 26; targetSdk 35; versionCode 44; versionName '1.1.1' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
 }

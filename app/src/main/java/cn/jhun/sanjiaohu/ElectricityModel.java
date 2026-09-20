@@ -52,9 +52,23 @@ final class ElectricityModel {
         if(area.contains("照明")||area.contains("灯光"))return LIGHT;
         return area.contains("空调")?AC:UNKNOWN;
     }
+    // Room labels are the join key for the two meters of one dorm, so both halves
+    // must normalise to the same value. Observed raw ids:
+    //   3-16-217           (3 segments, room last)
+    //   3-20--1-101        (4 segments, empty build slot)
+    //   3-19--1-照明101     (4 segments, LIGHT half carries its meter kind)
+    // The AC half of 食堂公寓 is "101" while the LIGHT half is "照明101", so strip a
+    // leading meter-kind word; otherwise one room shows up as two dropdown entries.
     static String room(String name){
-        Matcher m=Pattern.compile("^\\d+-[A-Za-z0-9]+-(\\d{3,4}[A-Za-z]?)$").matcher(name.trim());
-        return m.matches()?m.group(1):name.trim();
+        String value=name.trim();
+        // Take the segment after the last '-' when the id looks like a room path.
+        // Keep the whole string when it is already a bare label ("217", "门店A").
+        Matcher m=Pattern.compile("^[0-9]+-(?:[A-Za-z0-9]*-){1,3}(.+)$").matcher(value);
+        if(m.matches())value=m.group(1).trim();
+        for(String kind:new String[]{LIGHT_SUFFIX,AC_SUFFIX,"灯光"}){
+            if(value.length()>kind.length()&&value.startsWith(kind)){value=value.substring(kind.length()).trim();break;}
+        }
+        return value;
     }
     static double quantity(String raw,String unit){
         if(!unit.equals("度")&&!unit.equalsIgnoreCase("kWh"))throw new IllegalArgumentException("电表返回的单位无法识别");

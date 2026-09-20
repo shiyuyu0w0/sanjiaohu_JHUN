@@ -19,7 +19,7 @@ public final class AboutChangelogTest {
         check(updates.length == 1, "one update entry instead of a version history, got " + updates.length);
         String title = updates[0][0];
         String body = updates[0][1];
-        check("v1.1.2".equals(title), "entry is titled v1.1.2, got " + title);
+        check("v1.1.1".equals(title), "entry is titled v1.1.1, got " + title);
         check(!title.contains("当前版本") && !title.contains("首个公开版"), "title is just the version: " + title);
         check(body.indexOf('\n') > 0, "entry body is a list of lines");
         String[] lines = body.split("\n");
