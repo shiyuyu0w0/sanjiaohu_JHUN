@@ -162,6 +162,38 @@ public final class ElectricityDormTest {
         equal(ElectricityModel.LIGHT,ElectricityModel.kind(SHARED,"北区16舍","2层（照明）"));
         equal(ElectricityModel.UNKNOWN,ElectricityModel.kind(SHARED,"北区16舍","2层"));
 
+        // --- 房间号归一化：食堂公寓的照明侧带“照明”前缀，空调侧不带 ---
+        // 真实返回：照明 {"id":"3-19--1-照明101","name":"照明101"}
+        //           空调 {"id":"3-20--1-101","name":"101"}
+        // 两侧必须归一到同一个 key，否则一个房间在下拉里裂成两条。
+        equal("101",ElectricityModel.room("照明101"));
+        equal("101",ElectricityModel.room("101"));
+        equal("101",ElectricityModel.room("3-19--1-照明101"));
+        equal("101",ElectricityModel.room("3-20--1-101"));
+        equal("101",ElectricityModel.room("空调101"));
+        equal("101",ElectricityModel.room("灯光101"));
+        equal("101",ElectricityModel.room(" 照明101 "));
+        // 未带前缀的裸房间号不受影响
+        equal("217",ElectricityModel.room("217"));
+        equal("101A",ElectricityModel.room("2-15A-101A"));
+        equal("217",ElectricityModel.room("3-16-217"));
+        // 门店A 这类非房间标签保持原样（无“照明/空调”前缀可去）
+        equal("门店A",ElectricityModel.room("门店A"));
+        // 单独的“照明”二字不是前缀（去前缀要求后面还有内容）
+        equal("照明",ElectricityModel.room("照明"));
+
+        // --- 食堂公寓：房间下拉必须每个房间只有一条，且挂两块表 ---
+        SortedMap<String,List<ElectricityApi.Branch>> canteen=new TreeMap<>();
+        ElectricityApi.Item north=new ElectricityApi.Item("3","北校区照明");
+        canteen.put("食堂公寓照明",new ArrayList<>(Collections.singletonList(
+            new ElectricityApi.Branch(north,new ElectricityApi.Item("19","食堂公寓照明")))));
+        canteen.put("食堂公寓空调",new ArrayList<>(Collections.singletonList(
+            new ElectricityApi.Branch(north,new ElectricityApi.Item("20","食堂公寓空调")))));
+        SortedMap<String,List<ElectricityApi.Branch>> canteenMerged=ElectricityApi.pair(canteen);
+        equal(1,canteenMerged.size());
+        check(canteenMerged.containsKey("食堂公寓"));
+        equal(2,canteenMerged.get("食堂公寓").size());
+
         System.out.println("Electricity dorm merge: "+checks+" checks passed");
     }
 }
