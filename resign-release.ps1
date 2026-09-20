@@ -74,7 +74,8 @@ try {
     & "$tool/aapt2.exe" compile --dir "app/src/main/res" -o "$Work/resources.zip"; Check
     $mt = Get-Content -LiteralPath "app/src/main/AndroidManifest.xml" -Raw -Encoding UTF8
     # No BOM: aapt2 rejects a BOM as "not well-formed".
-    [IO.File]::WriteAllText("$PSScriptRoot/$Work/AndroidManifest.xml",
+    # $Work is already absolute; join with the manifest name only.
+    [IO.File]::WriteAllText((Join-Path $Work 'AndroidManifest.xml'),
         $mt.Replace('<manifest ', '<manifest package="cn.jhun.sanjiaohu" '),
         (New-Object Text.UTF8Encoding($false)))
     & "$tool/aapt2.exe" link -o "$Work/unsigned.apk" -I $android `
