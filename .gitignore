@@ -18,6 +18,31 @@ development.keystore
 *.apk.idsig
 *.aab
 
+# --- 凭据/会话：绝不提交 ---
+# 电费接口的 SESSION/sid 等同登录凭证，抓包或调试脚本里极易残留
+.cookies
+*cookie*.txt
+*session*.txt
+*idserial*
+# 本地 jbr / Android SDK 绝对路径
+local.properties
+
+# --- 临时调试脚本与输出 ---
+# 一次性排查用的抓取/编译脚本，不属于产品代码
+probe*.cjs
+dir-*.cjs
+tmp-*.cjs
+scratch/
+# 编译与诊断的临时产物
+args.txt
+javac-*.txt
+*-err.txt
+err.txt
+*-check.txt
+*-flow.txt
+*-names.txt
+result.txt
+
 # --- IDE ---
 .idea/
 *.iml
