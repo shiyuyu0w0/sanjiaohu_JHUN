@@ -1,6 +1,17 @@
-# 三角狐 v1.0.12
+# 三角狐 v1.1.0
 
 江汉大学个人课表应用，Android 8.0 及以上。
+
+## v1.1.0：关于页更新内容与技术支持
+
+- 版本号更新为 1.1.0（versionCode 43），沿用原签名，可覆盖安装 1.0.12，课表、自定义课程、账号与外观设置保留。
+- 关于页顺序调整为「版本号 → 更新内容 → 技术支持」：版本号卡片放在赞助下方，更新内容的标题下只写一条 v1.1.0，技术支持在页面最后。
+- 更新内容只写用户能看见、能用的功能，不再按版本罗列，也不写实现细节：课表、成绩、考试查询、电费、网上报修、大物实验报告、自定义课程、校园地图与校历、登录、外观，以及本页新增内容与可覆盖升级。
+- 「技术支持」使用底色标题，下方以较小的姓名标签居中列出「广」和「yy792e」两位同学。
+- 卡片沿用主题配色与深色模式：标题使用深主题色，正文按背景做对比度校正，栏目底色使用跟随主题的浅色入口底，离线可查看。
+- 版本仍为 1.1.0（versionCode 43），未再改动版本号；安装包 `Sanjiaohu-1.1.0.apk`（2,512,702 字节，SHA-256 `AF9A176C159CFF9FC92768D689454591B0C272F1B54AA81833B74ED9FE91C173`），与原发布版同一签名证书。
+
+验证：资源、Java、Dex 编译与 APK v2/v3 签名检查通过，签名指纹为 `2D:5C:4C:7A:B3:F5:E8:29:DF:B2:27:3F:33:3A:2A:F9:87:E5:12:DC:27:0F:BE:03:34:76:38:32:9C:DE:F2:2A`，与 `signing/README.md` 记录的正式证书一致；APK 内已确认 versionCode 43 / versionName 1.1.0、包名 `cn.jhun.sanjiaohu` 及「更新内容」「技术支持」「广」「yy792e」文案，旧版按版本罗列的更新历史已不在包内。新增 `tests/AboutChangelogTest.java`（62 项检查：只有一条 v1.1.0 更新说明、只用纯文本项目符号、每行不超过 90 字、覆盖 14 项用户可见功能、不含内部术语、旧版按版本罗列的字段已移除，以及「广」与「yy792e」两人）通过；Java 回归 `CourseTest` 20 项、`RevisionTest` 12544 项、`TermTest` 10 项、`MealGridTest` 13152 项、`AdaptiveTextTest` 6060 项、`ThemeTest` 2014 组、`WeekSwipeTest` 46 项、`WallpaperCropTest` 2188 项、`IdentityPolicyTest` 150 项、`IdentityNavigationTest` 90 项、`PhysicsLabPolicyTest` 37 项、`PaymentNavigationTest` 60 项、`ElectricityModelTest` 170 项全部通过（`ExamsTest` 与 `ElectricityApiTest` 需要 `org.json`，本机未备该依赖）。Node 回归 `tests/login.test.cjs`、`login-state.test.cjs`、`portal.test.cjs`（50 项）、`identity-session.test.cjs`（9 项）、`identity-document.test.cjs`（20 项）、`identity-login.test.cjs`（245 项）、`electricity-payment.test.cjs`（23 项）、`exams.test.cjs`（22 项）全部通过。当前没有连接 Android 真机或模拟器，尚未实测真机滚动浏览与排版效果。
 
 ## v1.0.12：考试查询与跟手切周
 
@@ -436,6 +447,14 @@ Gradle 配置使用 AGP 8.13.0、compileSdk 36、minSdk 26、targetSdk 35。不�
 javac -encoding UTF-8 -d test-classes app/src/main/java/cn/jhun/sanjiaohu/Course.java app/src/main/java/cn/jhun/sanjiaohu/CachePolicy.java app/src/main/java/cn/jhun/sanjiaohu/GridGeometry.java tests/CourseTest.java tests/RevisionTest.java
 java -cp test-classes cn.jhun.sanjiaohu.CourseTest
 java -cp test-classes cn.jhun.sanjiaohu.RevisionTest
+```
+
+关于页更新内容检查（需要 Android SDK 的 android.jar 才能编译 AboutActivity）：
+
+```powershell
+$sdkJar="$env:LOCALAPPDATA\Android\Sdk\platforms\android-36.1\android.jar"
+javac -encoding UTF-8 -cp $sdkJar -d test-classes app/src/main/java/cn/jhun/sanjiaohu/AboutActivity.java app/src/main/java/cn/jhun/sanjiaohu/ThemePalette.java app/src/main/java/cn/jhun/sanjiaohu/AppTheme.java tests/AboutChangelogTest.java
+java -cp "test-classes;$sdkJar" cn.jhun.sanjiaohu.AboutChangelogTest
 ```
 
 文字缩放采用 Android [TextView 自动字号](https://developer.android.com/develop/ui/views/text-and-emoji/autosizing-textview)。
