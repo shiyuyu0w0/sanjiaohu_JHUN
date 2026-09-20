@@ -66,7 +66,29 @@ class ElectricityApi {
     SortedMap<String,List<Branch>> buildings()throws Exception{
         permission();SortedMap<String,List<Branch>> out=new TreeMap<>();
         for(Item area:list(1,"0","0","0"))for(Item building:list(2,area.id,"0","0"))out.computeIfAbsent(building.name,k->new ArrayList<>()).add(new Branch(area,building));
-        if(out.isEmpty())throw new IOException("学校未返回可选宿舍楼");return out;
+        if(out.isEmpty())throw new IOException("学校未返回可选宿舍楼");return pair(out);
+    }
+    // Some dorms are listed as two buildings ("X照明" + "X空调") but the page shows a
+    // single option with both meters. Merge only a complete pair under the shared base
+    // name; every unpaired building keeps its own name and single meter.
+    static SortedMap<String,List<Branch>> pair(SortedMap<String,List<Branch>> source){
+        SortedMap<String,List<Branch>> out=new TreeMap<>();
+        for(Map.Entry<String,List<Branch>> entry:source.entrySet()){
+            String name=entry.getKey(),base=ElectricityModel.meterBase(name);
+            if(base!=null){
+                String light=base+ElectricityModel.LIGHT_SUFFIX,ac=base+ElectricityModel.AC_SUFFIX;
+                if(source.containsKey(light)&&source.containsKey(ac)){
+                    List<Branch> merged=out.computeIfAbsent(base,k->new ArrayList<>());
+                    for(Branch b:source.get(light))if(!merged.contains(b))merged.add(b);
+                    for(Branch b:source.get(ac))if(!merged.contains(b))merged.add(b);
+                    continue;
+                }
+            }
+            List<Branch> existing=out.get(name);
+            if(existing==null)out.put(name,new ArrayList<>(entry.getValue()));
+            else for(Branch b:entry.getValue())if(!existing.contains(b))existing.add(b);
+        }
+        return out;
     }
     SortedMap<String,List<Floor>> floors(List<Branch> branches)throws Exception{
         permission();SortedMap<String,List<Floor>> out=new TreeMap<>(ElectricityModel::compareFloors);
