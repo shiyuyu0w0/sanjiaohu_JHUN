@@ -81,6 +81,76 @@ public final class ElectricityDormTest {
         return out;
     }
 
+    static void addBranch(SortedMap<String,List<ElectricityApi.Branch>> directory,String areaId,String areaName,String id,String name){
+        directory.computeIfAbsent(name,k->new ArrayList<>()).add(new ElectricityApi.Branch(
+            new ElectricityApi.Item(areaId,areaName),new ElectricityApi.Item(id,name)));
+    }
+    static void areaPairing()throws Exception{
+        SortedMap<String,List<ElectricityApi.Branch>> source=new TreeMap<>();
+        addBranch(source,"south","南校区","L","同名公寓照明");
+        addBranch(source,"north","北校区","K","同名公寓空调");
+        SortedMap<String,List<ElectricityApi.Branch>> output=ElectricityApi.pair(source);
+        check(!output.containsKey("同名公寓"));
+        equal(1,output.get("同名公寓照明").size());
+        equal(1,output.get("同名公寓空调").size());
+
+        // Same ids and room labels in two areas must still stay separate throughout
+        // selection, floor/room requests and the final meter identifier.
+        addBranch(source,"south","南校区","K","同名公寓空调");
+        addBranch(source,"north","北校区","L","同名公寓照明");
+        output=ElectricityApi.pair(source);
+        equal(2,output.size());check(!output.containsKey("同名公寓"));
+        for(String areaId:new String[]{"south","north"}){
+            String areaName=areaId.equals("south")?"南校区":"北校区";
+            List<ElectricityApi.Branch> branches=output.get("同名公寓（"+areaName+"）");
+            equal(2,branches.size());
+            ElectricityApi api=new ElectricityApi("synthetic","test"){
+                void permission(){}
+                List<Item> list(int type,String area,String building,String level){
+                    equal(areaId,area);
+                    return Collections.singletonList(type==3?new Item("3","3层"):
+                        new Item(area+"/"+building+"/"+level+"/301","301"));
+                }
+                JSONObject get(String endpoint,String query)throws Exception{
+                    check(query.contains("roomverify="+enc(areaId+"/")));
+                    return new JSONObject().put("returncode","100").put("quantity","12.5").put("canbuy","true");
+                }
+            };
+            List<ElectricityApi.Meter> meters=api.rooms(api.floors(branches).get("3")).get("301");
+            equal(2,meters.size());Set<Integer> kinds=new HashSet<>();
+            for(ElectricityApi.Meter meter:meters){equal(areaId,meter.floor.branch.area.id);kinds.add(meter.floor.kind);check(api.reading(meter).ok);}
+            equal(new HashSet<>(Arrays.asList(ElectricityModel.AC,ElectricityModel.LIGHT)),kinds);
+        }
+        equal(output,ElectricityApi.pair(output));
+
+        // A complete pair in one area cannot absorb an unmatched half elsewhere.
+        source.get("同名公寓空调").removeIf(b->b.area.id.equals("north"));
+        output=ElectricityApi.pair(source);
+        equal(2,output.get("同名公寓").size());
+        equal("north",output.get("同名公寓照明").get(0).area.id);
+
+        // Area names can also be identical. Identity is determined by id, and
+        // qualified labels must not overwrite a real building with that name.
+        source.clear();
+        for(String id:new String[]{"a","b"}){
+            addBranch(source,id,"同名区域","L","公寓照明");
+            addBranch(source,id,"同名区域","K","公寓空调");
+        }
+        addBranch(source,"c","区域C","plain","公寓（同名区域）");
+        output=ElectricityApi.pair(source);equal(3,output.size());
+        check(output.containsKey("公寓（同名区域）"));
+        for(List<ElectricityApi.Branch> branches:output.values()){
+            Set<String> ids=new HashSet<>();for(ElectricityApi.Branch branch:branches)ids.add(branch.area.id);equal(1,ids.size());
+        }
+        equal(output,ElectricityApi.pair(output));
+
+        // Plain building names are also used by the school's existing separate
+        // lighting/shared-meter directories. Do not change that established path.
+        source.clear();addBranch(source,"3","北校区照明","16","北区16舍");
+        addBranch(source,"1",SHARED,"29","北区16舍");
+        equal(2,ElectricityApi.pair(source).get("北区16舍").size());
+    }
+
     public static void main(String[] args)throws Exception{
         Fake api=new Fake();
         SortedMap<String,List<ElectricityApi.Branch>> buildings=api.buildings();
@@ -194,6 +264,7 @@ public final class ElectricityDormTest {
         check(canteenMerged.containsKey("食堂公寓"));
         equal(2,canteenMerged.get("食堂公寓").size());
 
+        areaPairing();
         System.out.println("Electricity dorm merge: "+checks+" checks passed");
     }
 }

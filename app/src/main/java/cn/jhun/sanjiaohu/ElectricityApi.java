@@ -69,26 +69,54 @@ class ElectricityApi {
         if(out.isEmpty())throw new IOException("学校未返回可选宿舍楼");return pair(out);
     }
     // Some dorms are listed as two buildings ("X照明" + "X空调") but the page shows a
-    // single option with both meters. Merge only a complete pair under the shared base
-    // name; every unpaired building keeps its own name and single meter.
+    // single option with both meters. Pair suffixes only within the same area id.
+    // Plain names retain the existing shared-meter/lighting directory grouping.
     static SortedMap<String,List<Branch>> pair(SortedMap<String,List<Branch>> source){
-        SortedMap<String,List<Branch>> out=new TreeMap<>();
+        SortedMap<String,SortedMap<String,List<Branch>>> areas=new TreeMap<>();
+        SortedMap<String,List<List<Branch>>> options=new TreeMap<>();
         for(Map.Entry<String,List<Branch>> entry:source.entrySet()){
-            String name=entry.getKey(),base=ElectricityModel.meterBase(name);
-            if(base!=null){
-                String light=base+ElectricityModel.LIGHT_SUFFIX,ac=base+ElectricityModel.AC_SUFFIX;
-                if(source.containsKey(light)&&source.containsKey(ac)){
-                    List<Branch> merged=out.computeIfAbsent(base,k->new ArrayList<>());
-                    for(Branch b:source.get(light))if(!merged.contains(b))merged.add(b);
-                    for(Branch b:source.get(ac))if(!merged.contains(b))merged.add(b);
-                    continue;
+            String name=entry.getKey();
+            if(ElectricityModel.meterBase(name)==null){
+                addBuildingOption(options,name,entry.getValue());
+            }else{
+                for(Branch branch:entry.getValue()){
+                    areas.computeIfAbsent(branch.area.id,k->new TreeMap<>())
+                        .computeIfAbsent(name,k->new ArrayList<>()).add(branch);
                 }
             }
-            List<Branch> existing=out.get(name);
-            if(existing==null)out.put(name,new ArrayList<>(entry.getValue()));
-            else for(Branch b:entry.getValue())if(!existing.contains(b))existing.add(b);
+        }
+        for(SortedMap<String,List<Branch>> area:areas.values()){
+            for(Map.Entry<String,List<Branch>> entry:area.entrySet()){
+                String name=entry.getKey(),base=ElectricityModel.meterBase(name);
+                String light=base+ElectricityModel.LIGHT_SUFFIX,ac=base+ElectricityModel.AC_SUFFIX;
+                if(area.containsKey(light)&&area.containsKey(ac)){
+                    if(!name.equals(light))continue; // Emit each pair once.
+                    List<Branch> merged=new ArrayList<>(area.get(light));
+                    merged.addAll(area.get(ac));addBuildingOption(options,base,merged);
+                }else addBuildingOption(options,name,entry.getValue());
+            }
+        }
+        SortedMap<String,List<Branch>> out=new TreeMap<>();
+        // Reserve actual names before qualifying duplicates, so a generated label
+        // cannot overwrite another building. Old ambiguous saved names disappear
+        // and the panel asks the user to choose the area instead of guessing.
+        Set<String> reserved=new HashSet<>(options.keySet());
+        for(Map.Entry<String,List<List<Branch>>> entry:options.entrySet()){
+            String name=entry.getKey();
+            if(entry.getValue().size()==1){out.put(name,entry.getValue().get(0));continue;}
+            for(List<Branch> branches:entry.getValue()){
+                Item area=branches.get(0).area;
+                String label=name+"（"+area.name+"）";
+                if(reserved.contains(label)||out.containsKey(label))label=name+"（"+area.name+" · "+area.id+"）";
+                String prefix=label;int index=2;
+                while(reserved.contains(label)||out.containsKey(label))label=prefix+" · "+index++;
+                out.put(label,branches);
+            }
         }
         return out;
+    }
+    private static void addBuildingOption(Map<String,List<List<Branch>>> options,String name,List<Branch> branches){
+        if(!branches.isEmpty())options.computeIfAbsent(name,k->new ArrayList<>()).add(new ArrayList<>(branches));
     }
     SortedMap<String,List<Floor>> floors(List<Branch> branches)throws Exception{
         permission();SortedMap<String,List<Floor>> out=new TreeMap<>(ElectricityModel::compareFloors);
