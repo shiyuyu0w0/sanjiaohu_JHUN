@@ -18,7 +18,7 @@ import java.io.InputStream;
 public final class AboutActivity extends Activity {
     /** What users can see and use in this release; plain wording, no version-by-version history. */
     static final String[][] UPDATES={
-        {"v1.1.0","- 考试查询：首页第一个入口，显示考试时间、地点、座位和倒计时，考试当天标「今天」，考完显示「已考完」。\n- 电费：选宿舍楼、楼层、房间后查看空调与照明电量，可直接缴费用支付宝付款，也支持记住上次选的房间。\n- 大物实验报告：在校园网内打开实验网站，能选择文件提交报告。\n- 外观：跟随系统深色模式。\n- 本页：新增「更新内容」和「技术支持」。"},
+        {"v1.1.1","- 考试查询：首页第一个入口，显示考试时间、地点、座位和倒计时，考试当天标「今天」，考完显示「已考完」。\n- 电费：选宿舍楼、楼层、房间后查看空调与照明电量，可直接缴费用支付宝付款，也支持记住上次选的房间。\n- 电费：留学生公寓、研究生公寓和食堂公寓的空调与照明合并成一个选项，两块电表都能查询和缴费。\n- 校园地图：可以定位当前位置，也能查看宿舍、教学楼和食堂。\n- 课表：修复了部分同学课表获取不完整的问题。\n- 大物实验报告：在校园网内打开实验网站，能选择文件提交报告。\n- 外观：跟随系统深色模式。\n- 本页：新增「更新内容」和「技术支持」。"},
     };
     /** Technical-support names shown under the「技术支持」heading. */
     static final String[] SUPPORT={"广","yy792e"};
