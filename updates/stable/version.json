@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "manifestRevision": 2,
+  "enabled": false,
+  "channel": "stable",
+  "packageName": "cn.jhun.sanjiaohu",
+  "versionCode": 45,
+  "versionName": "1.1.2",
+  "minSdk": 26,
+  "releaseNotes": [
+    "新增应用内检查更新，在个人页的关于中查看新版本。",
+    "支持加速与 GitHub 官方两条下载线路，下载失败可切换或重试。",
+    "下载后校验安装包，由 Android 系统确认覆盖安装。"
+  ],
+  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.1.2",
+  "apk": {
+    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.2/Sanjiaohu-1.1.2.apk",
+    "sizeBytes": 2545610,
+    "sha256": "a91ca79fe5966a792e719e8cf36c601da04fd4d8d3f5ce3b8c2449aeabf4253f",
+    "mirrors": [
+      {
+        "id": "ghproxy",
+        "name": "Accelerated",
+        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.2/Sanjiaohu-1.1.2.apk"
+      }
+    ]
+  }
+}

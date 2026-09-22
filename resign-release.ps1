@@ -1,4 +1,4 @@
-# Re-sign v1.1.1 with the OFFICIAL signing key.
+# Re-sign v1.1.2 with the OFFICIAL signing key.
 #
 # Usage:
 #   1. Put the official key at signing/development.keystore
@@ -21,7 +21,7 @@ param(
     [string]$StorePass = 'android',
     [string]$KeyPass = 'android',
     [string]$Alias = 'androiddebugkey',
-    [string]$Apk = "$PSScriptRoot/Sanjiaohu-1.1.1.apk",
+    [string]$Apk = "$PSScriptRoot/Sanjiaohu-1.1.2.apk",
     # Official certificate fingerprint, recorded in README v1.1.0.
     [string]$Expected = '2D:5C:4C:7A:B3:F5:E8:29:DF:B2:27:3F:33:3A:2A:F9:87:E5:12:DC:27:0F:BE:03:34:76:38:32:9C:DE:F2:2A'
 )

@@ -18,11 +18,16 @@ import java.io.InputStream;
 public final class AboutActivity extends Activity {
     /** What users can see and use in this release; plain wording, no version-by-version history. */
     static final String[][] UPDATES={
-        {"v1.1.1","- 考试查询：首页第一个入口，显示考试时间、地点、座位和倒计时，考试当天标「今天」，考完显示「已考完」。\n- 电费：选宿舍楼、楼层、房间后查看空调与照明电量，可直接缴费用支付宝付款，也支持记住上次选的房间。\n- 电费：留学生公寓、研究生公寓和食堂公寓的空调与照明合并成一个选项，两块电表都能查询和缴费。\n- 校园地图：可以定位当前位置，也能查看宿舍、教学楼和食堂。\n- 课表：修复了部分同学课表获取不完整的问题。\n- 大物实验报告：在校园网内打开实验网站，能选择文件提交报告。\n- 外观：跟随系统深色模式。\n- 本页：新增「更新内容」和「技术支持」。"},
+        {"v1.1.2","- 应用更新：在关于页检查新版本，支持加速和官方两条下载线路，下载后由系统确认覆盖升级。\n- 课表：同步后保存在本地，支持滑动切周与自定义课程。\n- 成绩：查看学期成绩和汇总。\n- 考试查询：显示考试时间、地点、座位和倒计时。\n- 电费：选择宿舍房间后查看空调与照明电量，支持分别缴费。\n- 校园地图与校历：查看校园地点、当前位置和学期安排。\n- 网上报修：进入学校报修服务。\n- 大物实验报告：在校园网内提交实验报告。\n- 登录：保存账号后方便再次进入学校服务。\n- 外观：支持主题配色、壁纸与深色模式。\n- 本页：查看更新内容和技术支持。"},
     };
     /** Technical-support names shown under the「技术支持」heading. */
     static final String[] SUPPORT={"广","yy792e"};
     ThemePalette theme;
+    UpdatePrompt updatePrompt;
+    @Override protected void onResume(){super.onResume();if(updatePrompt!=null)updatePrompt.resume();}
+    @Override protected void onPause(){if(updatePrompt!=null)updatePrompt.pause();super.onPause();}
+    @Override protected void onDestroy(){if(updatePrompt!=null)updatePrompt.destroy();super.onDestroy();}
+    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);if(updatePrompt!=null)updatePrompt.save(state);}
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
         theme=AppTheme.from(this,getSharedPreferences("settings",MODE_PRIVATE).getInt("themeColor",0xff2ecbff));
@@ -42,6 +47,7 @@ public final class AboutActivity extends Activity {
         TextView caption=text("觉得好用就打赏一杯咖啡吧",13,ThemePalette.readable(theme.muted,theme.entrySurface,4.5),false);caption.setGravity(Gravity.CENTER);caption.setLineSpacing(dp(3),1);sponsor.addView(caption,new LinearLayout.LayoutParams(-1,-2));content.addView(sponsor);gap(content,16);
         String current="1.0.1";try{current=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
         LinearLayout version=card();version.setOrientation(LinearLayout.HORIZONTAL);version.setGravity(Gravity.CENTER_VERTICAL);version.addView(text("版本号",15,theme.text,false),new LinearLayout.LayoutParams(0,-2,1));
+        TextView updateEntry=text("检查更新",12,theme.deepAccent,true);updateEntry.setGravity(Gravity.CENTER);updateEntry.setSingleLine(true);updateEntry.setPadding(dp(10),dp(7),dp(10),dp(7));updateEntry.setMinHeight(dp(36));updateEntry.setFocusable(true);updateEntry.setBackground(new RippleDrawable(ColorStateList.valueOf((theme.primary&0xffffff)|0x22000000),shape(theme.controlSurface,12),shape(theme.rippleMask,12)));LinearLayout.LayoutParams updateSize=new LinearLayout.LayoutParams(-2,-2);updateSize.rightMargin=dp(10);version.addView(updateEntry,updateSize);updatePrompt=new UpdatePrompt(this,theme,updateEntry,saved);updateEntry.setOnClickListener(v->updatePrompt.check());
         version.addView(text(current.startsWith("v")?current:"v"+current,18,theme.deepAccent,true));content.addView(version);gap(content,16);
         LinearLayout updates=card();TextView updatesTitle=text("更新内容",22,theme.deepAccent,true);updatesTitle.setGravity(Gravity.CENTER);updates.addView(updatesTitle,new LinearLayout.LayoutParams(-1,-2));
         for(String[] entry:UPDATES){updates.addView(text(entry[0],15,theme.deepAccent,true),new LinearLayout.LayoutParams(-1,-2));TextView body=text(entry[1],13,ThemePalette.readable(theme.text,theme.entrySurface,7),false);body.setLineSpacing(dp(5),1);body.setPadding(0,dp(10),0,0);updates.addView(body,new LinearLayout.LayoutParams(-1,-2));}

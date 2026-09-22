@@ -49,6 +49,7 @@ public class MainActivity extends Activity {
     final List<CourseCardView> previousCards=new ArrayList<>();
     int transitionFrom=-1;
     TextView stateText;
+    TextView updateDot;
     Dialog activeSheet;
     final List<CourseCardView> visibleCards=new ArrayList<>();
     WebView web;
@@ -112,6 +113,8 @@ public class MainActivity extends Activity {
         setContentView(root); createWeb(); render();
     }
     @Override protected void onStart(){super.onStart();inBackground=false;selectedWeek=currentWeek();render();handler.removeCallbacks(examClock);if(page==4)handler.postDelayed(examClock,30000);if(prefs.getBoolean("loginCompleted",false)||canAutoLogin())sync();}
+    @Override protected void onResume(){super.onResume();updateBadge();UpdateStore.check(getApplicationContext(),false,error->handler.post(()->{if(!isDestroyed())updateBadge();}));}
+    void updateBadge(){if(updateDot!=null)updateDot.setVisibility(new UpdateStore(this).available(this)?View.VISIBLE:View.GONE);}
     @Override protected void onStop(){finishWeekTransition();super.onStop();if(pageAnimator!=null)pageAnimator.cancel();if(moreMenu!=null)moreMenu.dismiss();inBackground=true;verified=false;automaticCredentials=null;autoRunning=false;if(busy){generation++;busy=false;web.stopLoading();setState("本地课表 · 返回应用时重新同步");}CookieManager.getInstance().flush();}
     @Override protected void onDestroy(){finishWeekTransition();if(pageAnimator!=null)pageAnimator.cancel();if(activeSheet!=null)activeSheet.dismiss();handler.removeCallbacksAndMessages(null);authIo.shutdown();web.destroy();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putBoolean("todayLabel",todayLabel);out.putFloat("wallpaperAspect",wallpaperAspect);}
@@ -309,7 +312,7 @@ public class MainActivity extends Activity {
         if(screen!=null)root.removeView(screen);authStatusText=null;
         screen=column();screen.setPadding(dp(10),dp(3),dp(10),dp(3));root.addView(screen,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout mast=row();mast.setMinimumHeight(dp(48));LinearLayout brand=column();brand.addView(label(page==4?"考试查询":page==3?"成绩":page==2?"个人":"三角狐",25,INK,true));mast.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
-        if(page==2)mast.addView(iconButton("关于",16,()->startActivity(new Intent(this,AboutActivity.class))),new LinearLayout.LayoutParams(dp(48),dp(48)));
+        updateDot=null;if(page==2){FrameLayout about=new FrameLayout(this);about.addView(iconButton("关于",16,()->startActivity(new Intent(this,AboutActivity.class))),new FrameLayout.LayoutParams(dp(48),dp(48)));updateDot=label("●",11,palette.error,true);updateDot.setContentDescription("有新版本");FrameLayout.LayoutParams dotSize=new FrameLayout.LayoutParams(dp(14),dp(14),Gravity.TOP|Gravity.RIGHT);dotSize.topMargin=dp(3);about.addView(updateDot,dotSize);mast.addView(about,new LinearLayout.LayoutParams(dp(48),dp(48)));updateBadge();}
         if(page==3||page==4)mast.addView(themedButton("返回首页",()->switchPage(0),false),new LinearLayout.LayoutParams(-2,dp(40)));
         if(page==1){TextView menu=label("⋮",28,ACCENT_TEXT,true);menu.setGravity(Gravity.CENTER);menu.setContentDescription("更多选项");menu.setFocusable(true);menu.setOnClickListener(v->showMenu(v));mast.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48)));}screen.addView(mast);
         LinearLayout pageContent=column();screen.addView(pageContent,new LinearLayout.LayoutParams(-1,0,1));
