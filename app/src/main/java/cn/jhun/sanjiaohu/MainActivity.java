@@ -282,7 +282,7 @@ public class MainActivity extends Activity {
         if(moreMenu!=null && moreMenu.isShowing()){moreMenu.dismiss();return;}
         boolean hasPreviousSchedule=false;
         if(!selectedTerm.isEmpty())try{hasPreviousSchedule=academicStore.scheduleSnapshot(selectedTerm,"previous")!=null;}catch(Exception ignored){}
-        moreMenu=MoreMenu.show(this,anchor,palette,hasPreviousSchedule,id->{switch(id){case 1:cancelSync();sync();break;case 2:changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;case 21:restoreSchedule();break;}});
+        moreMenu=MoreMenu.show(this,anchor,palette,hasPreviousSchedule,id->{switch(id){case 1:cancelSync();sync();break;case 2:if(anchor()==null)calibrate();else changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;case 21:restoreSchedule();break;}});
     }
     void refreshAppearance(){
         wallpaper=WallpaperStore.load(this);int primary=prefs.getBoolean("manualTheme",false)?prefs.getInt("manualThemeColor",0xff2ecbff):backgroundPrimary();
@@ -330,8 +330,9 @@ public class MainActivity extends Activity {
         if(page==1){
             if(scheduleCandidate!=null)pageContent.addView(themedButton("发现课表更新 · 点击核对",()->reviewSchedule(),false),new LinearLayout.LayoutParams(-1,dp(40)));
             LinearLayout weekBar=row();previousWeekButton=button("‹",()->changeWeek(selectedWeek-1));previousWeekButton.setContentDescription("上一周");weekBar.addView(previousWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));
-            weekTitle=button("",()->chooseWeek());weekTitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);weekBar.addView(weekTitle,new LinearLayout.LayoutParams(0,dp(44),1));nextWeekButton=button("›",()->changeWeek(selectedWeek+1));nextWeekButton.setContentDescription("下一周");weekBar.addView(nextWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));pageContent.addView(weekBar);updateWeekTitle();
-            weekHost=new WeekSwipeLayout(this,new WeekSwipeLayout.Listener(){public void drag(float offset){dragWeek(offset);}public void release(int direction){releaseWeek(direction);}});weekHost.addView(weekView(),new FrameLayout.LayoutParams(-1,-1));pageContent.addView(weekHost,new LinearLayout.LayoutParams(-1,0,1));
+            weekTitle=button("",()->{if(anchor()==null)calibrate();else chooseWeek();});weekTitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);weekBar.addView(weekTitle,new LinearLayout.LayoutParams(0,dp(44),1));nextWeekButton=button("›",()->changeWeek(selectedWeek+1));nextWeekButton.setContentDescription("下一周");weekBar.addView(nextWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));pageContent.addView(weekBar);updateWeekTitle();
+            if(anchor()==null){LinearLayout.LayoutParams noticeSize=new LinearLayout.LayoutParams(-1,-2);noticeSize.setMargins(dp(5),dp(2),dp(5),dp(7));pageContent.addView(calibrationNotice(),noticeSize);}
+            weekHost=new WeekSwipeLayout(this,new WeekSwipeLayout.Listener(){public void drag(float offset){dragWeek(offset);}public void release(int direction){releaseWeek(direction);}});weekHost.setSwipeEnabled(anchor()!=null);weekHost.addView(weekView(),new FrameLayout.LayoutParams(-1,-1));pageContent.addView(weekHost,new LinearLayout.LayoutParams(-1,0,1));
         }else{
             ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.addView(page==0?homeView():page==4?examsView():page==3?gradesView():userView());pageContent.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         }
@@ -350,9 +351,15 @@ public class MainActivity extends Activity {
     }
     @Override public void onBackPressed(){if(page>=3){switchPage(0);return;}super.onBackPressed();}
     void updateWeekTitle(){
-        String mid="第 "+selectedWeek+" 周";LocalDate a=anchor();
-        if(a!=null)mid+="  ·  "+a.plusWeeks(selectedWeek-1).format(DateTimeFormatter.ofPattern("M/d"))+"—"+a.plusWeeks(selectedWeek-1).plusDays(6).format(DateTimeFormatter.ofPattern("M/d"));else mid+="  ·  待校准";
-        weekTitle.setText(mid);previousWeekButton.setEnabled(selectedWeek>1);previousWeekButton.setAlpha(selectedWeek>1?1:.35f);nextWeekButton.setEnabled(selectedWeek<maxWeek());nextWeekButton.setAlpha(selectedWeek<maxWeek()?1:.35f);
+        LocalDate a=anchor();String mid=a==null?"周次未校准 · 全部课程":"第 "+selectedWeek+" 周  ·  "+a.plusWeeks(selectedWeek-1).format(DateTimeFormatter.ofPattern("M/d"))+"—"+a.plusWeeks(selectedWeek-1).plusDays(6).format(DateTimeFormatter.ofPattern("M/d"));
+        weekTitle.setText(mid);weekTitle.setContentDescription(a==null?"周次未校准，点击校准":"第 "+selectedWeek+" 周，点击选择教学周");
+        previousWeekButton.setEnabled(a!=null&&selectedWeek>1);previousWeekButton.setAlpha(a!=null&&selectedWeek>1?1:.35f);nextWeekButton.setEnabled(a!=null&&selectedWeek<maxWeek());nextWeekButton.setAlpha(a!=null&&selectedWeek<maxWeek()?1:.35f);
+    }
+    View calibrationNotice(){
+        LinearLayout banner=row();banner.setPadding(dp(13),dp(9),dp(9),dp(9));GradientDrawable background=shape(palette.selectedSurface,16);background.setStroke(dp(1),palette.deepAccent);banner.setBackground(background);
+        LinearLayout words=column();words.addView(label("请先校准周次",15,INK,true));space(words,3);TextView hint=label("已展示全部课程 · 校准后按周筛选",11,MUTED,false);hint.setMaxLines(2);words.addView(hint);banner.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+        TextView action=themedButton("去校准",this::calibrate,true);LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(dp(76),dp(38));size.leftMargin=dp(8);banner.addView(action,size);
+        return banner;
     }
     String scheduleStageLabel(String stage){
         switch(stage){case "schedule-menu":return "正在打开教学安排";case "schedule-tab":return "正在打开个人课表";case "schedule-form":return "等待课表查询表单";case "term-loading":case "term-switching":return "正在切换目标学期";case "list-switching":return "正在切换列表视图";case "list-switch-failed":return "列表视图未能切换";case "report-pagination":return "等待课表所有分页";case "report-not-found":return "等待课程列表";case "empty-unconfirmed":return "等待学校确认空课表";case "report-settling":return "正在校验课表完整性";case "term-mismatch":case "selection-changed":return "课表学期尚未匹配";case "table-structure":case "rows-unreadable":return "课表列表格式无法识别";case "report-error":return "学校课表查询失败";default:return "正在加载列表课表";}
@@ -390,7 +397,7 @@ public class MainActivity extends Activity {
         previewWeek=0;queuedWeek=0;weekProgress=0;previousCards.clear();
     }
     void changeWeek(int requested){
-        int target=WeekSwipeGesture.target(selectedWeek,requested,maxWeek());if(page!=1||target==selectedWeek||weekHost==null)return;
+        int target=WeekSwipeGesture.target(selectedWeek,requested,maxWeek());if(anchor()==null||page!=1||target==selectedWeek||weekHost==null)return;
         if(weekAnimator!=null){queuedWeek=target;return;}
         finishWeekTransition();prepareWeek(target);settleWeek(true);
     }
@@ -410,7 +417,7 @@ public class MainActivity extends Activity {
         old.setAlpha(1-.12f*progress);next.setAlpha(.88f+.12f*progress);
     }
     void dragWeek(float offset){
-        if(weekHost==null||weekAnimator!=null||!android.animation.ValueAnimator.areAnimatorsEnabled())return;
+        if(anchor()==null||weekHost==null||weekAnimator!=null||!android.animation.ValueAnimator.areAnimatorsEnabled())return;
         int direction=offset<0?1:-1,target=WeekSwipeGesture.target(selectedWeek,selectedWeek+direction,maxWeek());
         if(previewWeek!=0&&previewWeek!=target)finishWeekTransition();
         if(target==selectedWeek){weekHost.getChildAt(0).setTranslationX(Math.max(-dp(24),Math.min(dp(24),offset*.15f)));return;}
@@ -418,7 +425,7 @@ public class MainActivity extends Activity {
         moveWeek(Math.min(.98f,Math.abs(offset)/Math.max(1,weekHost.getWidth())),direction);
     }
     void releaseWeek(int direction){
-        if(weekHost==null||weekAnimator!=null)return;
+        if(anchor()==null||weekHost==null||weekAnimator!=null)return;
         if(previewWeek==0){finishWeekTransition();if(direction!=0)changeWeek(selectedWeek+direction);return;}
         settleWeek(direction!=0&&Integer.signum(previewWeek-selectedWeek)==direction);
     }
@@ -432,6 +439,7 @@ public class MainActivity extends Activity {
         weekAnimator.addListener(new android.animation.AnimatorListenerAdapter(){@Override public void onAnimationEnd(android.animation.Animator a){int pending=queuedWeek;finishWeekTransition();if(pending!=0)changeWeek(pending);}});weekAnimator.start();
     }
     void chooseWeek(){
+        if(anchor()==null){calibrate();return;}
         UiSheet sheet=new UiSheet(this,"选择教学周",activeSchedule().term,.69f);
         int current=currentWeek();
         for(int start=1;start<=maxWeek();start+=4){LinearLayout line=row();
@@ -537,6 +545,7 @@ public class MainActivity extends Activity {
         control.setContentDescription(actionName+"，"+termName);control.setFocusable(true);control.setOnClickListener(v->action.run());return control;
     }
     View iconButton(String title,int id,Runnable action){
+        if(id==1)return RefreshIconButton.create(this,palette,title,action);
         FrameLayout hit=new FrameLayout(this);MoreMenu.Icon icon=new MoreMenu.Icon(this,id,palette.deepAccent);icon.setBackground(shape(palette.entrySurface,11));icon.setDuplicateParentStateEnabled(true);hit.addView(icon,new FrameLayout.LayoutParams(dp(32),dp(32),Gravity.CENTER));hit.setContentDescription(title);hit.setFocusable(true);hit.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),null,shape(palette.rippleMask,12)));hit.setOnClickListener(v->action.run());return hit;
     }
     void showGradeSummary(){
@@ -652,16 +661,16 @@ public class MainActivity extends Activity {
             TextView time=label(p+"\n"+activeSchedule().starts[p]+"\n"+activeSchedule().ends[p],7,ThemePalette.readable(MUTED,palette.gridSurface,4.5),false);time.setAutoSizeTextTypeUniformWithConfiguration(5,8,1,android.util.TypedValue.COMPLEX_UNIT_SP);time.setContentDescription("第 "+p+" 节，"+activeSchedule().starts[p]+" 上课，"+activeSchedule().ends[p]+" 下课");time.setGravity(Gravity.CENTER);time.setIncludeFontPadding(false);time.setBackground(shape(palette.gridSurface,5));grid.add(time,WeekGridView.TIME,1,p,p,0,1);
             for(int d=1;d<=7;d++){View cell=new View(this);cell.setBackground(shape(wallpaper==null?BG:(palette.dark?0x15000000:0x15ffffff),5));grid.add(cell,WeekGridView.CELL,d,p,p,0,1);}
         }
-        List<Course> courses=CustomCourses.at(activeSchedule().courses,localCourses,activeSchedule().term,selectedWeek);Map<Course,Integer> lanes=new IdentityHashMap<>(),counts=new IdentityHashMap<>();
+        boolean calibrated=a!=null;List<Course> courses=calibrated?CustomCourses.at(activeSchedule().courses,localCourses,activeSchedule().term,selectedWeek):CustomCourses.all(activeSchedule().courses,localCourses,activeSchedule().term);Map<Course,Integer> lanes=new IdentityHashMap<>(),counts=new IdentityHashMap<>();
         for(int d=1;d<=7;d++){List<Course> cluster=new ArrayList<>();int end=0;for(Course c:courses){if(c.day!=d)continue;if(!cluster.isEmpty()&&c.start>end){assign(cluster,lanes,counts);cluster.clear();}cluster.add(c);end=Math.max(cluster.size()==1?0:end,c.end);}assign(cluster,lanes,counts);}
         for(Course c:courses)for(int segmentStart=c.start;segmentStart<=c.end;segmentStart=((segmentStart-1)/4+1)*4+1){
             int segmentEnd=Math.min(c.end,((segmentStart-1)/4+1)*4);
-            int cardColor=courseColor(c);CourseCardView card=new CourseCardView(this);card.setText(c.name+"\n"+c.room);card.setTextSize(10);card.setTextColor(INK);card.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));card.setTag(cardColor);visibleCards.add(card);card.setPadding(dp(2),dp(2),dp(2),dp(2));card.setGravity(Gravity.CENTER);card.setIncludeFontPadding(false);card.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);card.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
-            card.setAutoSizeTextTypeUniformWithConfiguration(6,11,1,android.util.TypedValue.COMPLEX_UNIT_SP);styleCourseCard(card,cardColor,transparency());
-            card.setContentDescription(c.name+"，"+c.room+"，第"+c.start+"至"+c.end+"节，点按查看完整详情");card.setFocusable(true);card.setOnClickListener(v->detail(c));grid.add(card,WeekGridView.CELL,c.day,segmentStart,segmentEnd,lanes.get(c),counts.get(c));
+            int cardColor=courseColor(c);CourseCardView card=new CourseCardView(this);card.setText(c.name+"\n"+c.room);card.setTextSize(calibrated?10:9);card.setTextColor(INK);card.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));card.setTag(cardColor);visibleCards.add(card);card.setPadding(dp(calibrated?2:1),dp(2),dp(calibrated?2:1),dp(2));card.setGravity(Gravity.CENTER);card.setIncludeFontPadding(false);card.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);card.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
+            card.setAutoSizeTextTypeUniformWithConfiguration(calibrated?6:5,calibrated?11:10,1,android.util.TypedValue.COMPLEX_UNIT_SP);styleCourseCard(card,cardColor,transparency());
+            card.setContentDescription(c.name+"，"+c.room+"，第"+c.start+"至"+c.end+"节"+(calibrated?"":"，第 "+c.weekText+" 周")+"，点按查看完整详情");card.setFocusable(true);card.setOnClickListener(v->detail(c));grid.add(card,WeekGridView.CELL,c.day,segmentStart,segmentEnd,lanes.get(c),counts.get(c));
         }
         for(int after:new int[]{4,8}){String title=after==4?"午休":"晚餐";TextView gap=label(title+"  "+activeSchedule().ends[after]+"–"+activeSchedule().starts[after+1],8,palette.deepAccent,false);gap.setGravity(Gravity.CENTER);gap.setIncludeFontPadding(false);gap.setBackgroundColor(palette.controlSurface);grid.add(gap,WeekGridView.BREAK,1,after,after,0,1);}
-        if(courses.isEmpty()){TextView free=label(schedule==null?"暂无该学期课表，联网后获取":"这一周没有课程安排",14,ACCENT_TEXT,true);free.setGravity(Gravity.CENTER);free.setShadowLayer(dp(3),0,0,palette.dark?Color.BLACK:Color.WHITE);grid.add(free,WeekGridView.EMPTY,1,1,12,0,1);}
+        if(courses.isEmpty()){TextView free=label(schedule==null?"暂无该学期课表，联网后获取":calibrated?"这一周没有课程安排":"该学期没有课程安排",14,ACCENT_TEXT,true);free.setGravity(Gravity.CENTER);free.setShadowLayer(dp(3),0,0,palette.dark?Color.BLACK:Color.WHITE);grid.add(free,WeekGridView.EMPTY,1,1,12,0,1);}
         return grid;
     }
     void assign(List<Course> group,Map<Course,Integer> lanes,Map<Course,Integer> counts){List<Integer> ends=new ArrayList<>();for(Course c:group){int i=0;while(i<ends.size()&&ends.get(i)>=c.start)i++;if(i==ends.size())ends.add(c.end);else ends.set(i,c.end);lanes.put(c,i);}for(Course c:group)counts.put(c,ends.size());}

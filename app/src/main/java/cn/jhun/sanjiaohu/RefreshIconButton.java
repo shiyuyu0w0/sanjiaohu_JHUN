@@ -14,7 +14,7 @@ final class RefreshIconButton {
     static View create(Activity activity,ThemePalette theme,String description,Runnable action){
         FrameLayout button=new FrameLayout(activity);
         MoreMenu.Icon glyph=new MoreMenu.Icon(activity,1,theme.deepAccent);
-        glyph.setBackground(MoreMenu.shape(activity,theme.entrySurface,11));
+        glyph.setBackground(MoreMenu.shape(activity,theme.entrySurface,18));
         glyph.setDuplicateParentStateEnabled(true);
         glyph.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         button.addView(glyph,new FrameLayout.LayoutParams(MoreMenu.dp(activity,32),MoreMenu.dp(activity,32),Gravity.CENTER));

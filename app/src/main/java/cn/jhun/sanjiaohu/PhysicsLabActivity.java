@@ -58,7 +58,8 @@ public final class PhysicsLabActivity extends Activity {
     void createWebView(){
         web=new WebView(this);web.setBackgroundColor(theme.surface);body.addView(web,0,new FrameLayout.LayoutParams(-1,-1));
         WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setUseWideViewPort(true);settings.setLoadWithOverviewMode(true);
-        settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSupportMultipleWindows(false);settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        // Gallery/document pickers return content:// URIs. WebView needs this to read the chosen image.
+        settings.setAllowFileAccess(false);settings.setAllowContentAccess(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSupportMultipleWindows(false);settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView view,int value){if(!failed){progress.setProgress(value);progress.setVisibility(value<100?View.VISIBLE:View.INVISIBLE);}}
@@ -67,7 +68,7 @@ public final class PhysicsLabActivity extends Activity {
             @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){
                 if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
                 Intent pick=params.createIntent();
-                pick.addCategory(Intent.CATEGORY_OPENABLE);pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                pick.addCategory(Intent.CATEGORY_OPENABLE);pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 // Some forms pass bare extensions (".docx") as accept values; pickers match those
                 // against no MIME type and show an empty list. Fall back to any file.
                 String fallback=PhysicsLabPolicy.pickerType(params.getAcceptTypes());

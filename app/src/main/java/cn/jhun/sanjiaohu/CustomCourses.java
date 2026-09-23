@@ -20,4 +20,10 @@ public final class CustomCourses {
         for(Course c:local)if((c.term.equals("*")||c.term.equals(term))&&c.weeks.contains(week))result.add(c);
         result.sort(Comparator.comparingInt((Course c)->c.day).thenComparingInt(c->c.start).thenComparing(c->c.name));return result;
     }
+    /** Before week calibration, show each course once regardless of its teaching weeks. */
+    public static List<Course> all(List<Course> network,List<Course> local,String term){
+        List<Course> result=new ArrayList<>(network);
+        for(Course c:local)if(c.term.equals("*")||c.term.equals(term))result.add(c);
+        result.sort(Comparator.comparingInt((Course c)->c.day).thenComparingInt(c->c.start).thenComparing(c->c.name));return result;
+    }
 }

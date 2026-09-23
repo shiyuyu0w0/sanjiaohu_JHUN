@@ -4,7 +4,7 @@ param(
     [string]$Platform = 'android-36.1',
     [string]$BuildTools = '36.1.0',
     [string]$Work = "$PSScriptRoot/build/android-build",
-    [string]$Apk = "$PSScriptRoot/Sanjiaohu-1.1.3.apk"
+    [string]$Apk = "$PSScriptRoot/Sanjiaohu-1.1.4.apk"
 )
 $ErrorActionPreference = 'Stop'
 # Relaxed only around native calls: Windows PowerShell turns a native tool's stderr into a

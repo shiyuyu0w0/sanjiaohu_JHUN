@@ -13,6 +13,10 @@ public final class CustomCoursesTest {
         List<Course> oldNetwork=new ArrayList<>(Collections.singletonList(remote));
         check(CustomCourses.at(oldNetwork,local,"春季学期",3).size()==3,"remote and overlapping custom courses coexist");
         check(CustomCourses.at(oldNetwork,local,"春季学期",4).size()==2,"odd weeks respected");
+        List<Course> uncalibrated=CustomCourses.all(oldNetwork,local,"春季学期");
+        check(uncalibrated.size()==3&&uncalibrated.contains(remote)&&uncalibrated.contains(all)&&uncalibrated.contains(spring),"uncalibrated grid shows all relevant courses once");
+        check(!uncalibrated.contains(autumn),"uncalibrated grid keeps the selected term");
+        check(CustomCourses.all(oldNetwork,local,"春季学期").size()==3,"uncalibrated grid does not duplicate a course for each week");
         check(CustomCourses.at(Collections.emptyList(),local,"春季学期",3).contains(spring),"empty refresh preserves custom");
         check(CustomCourses.at(Collections.emptyList(),local,"秋季学期",4).contains(autumn),"term scope");
         check(!CustomCourses.at(oldNetwork,local,"秋季学期",4).contains(spring),"do not leak other term");

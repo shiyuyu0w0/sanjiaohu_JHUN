@@ -59,9 +59,20 @@ public final class MoreMenu {
         final int id;final Paint pen=new Paint(Paint.ANTI_ALIAS_FLAG);
         void setColor(int color){pen.setColor(color);invalidate();}
         Icon(Activity a,int id,int color){super(a);this.id=id;pen.setColor(color);pen.setStyle(Paint.Style.STROKE);pen.setStrokeWidth(1.6f);pen.setStrokeCap(Paint.Cap.ROUND);pen.setStrokeJoin(Paint.Join.ROUND);}
-        @Override protected void onDraw(Canvas c){super.onDraw(c);c.save();c.translate(getWidth()*.2f,getHeight()*.2f);c.scale(getWidth()*.6f/24,getHeight()*.6f/24);
-            if(id==1){c.drawArc(new RectF(3,3,21,21),38,290,false,pen);Path p=new Path();p.moveTo(15,4);p.lineTo(19,8);p.lineTo(14,9);c.drawPath(p,pen);}
-            else if(id==6){c.drawRoundRect(new RectF(3,5,21,20),2,2,pen);c.drawCircle(8,9,1.2f,pen);Path p=new Path();p.moveTo(4,18);p.lineTo(10,12);p.lineTo(14,16);p.lineTo(17,13);p.lineTo(20,16);c.drawPath(p,pen);c.drawArc(new RectF(11,2,21,12),155,245,false,pen);Path arrow=new Path();arrow.moveTo(11,4);arrow.lineTo(11,8);arrow.lineTo(15,8);c.drawPath(arrow,pen);}
+        @Override protected void onDraw(Canvas c){super.onDraw(c);c.save();
+            if(id==1){
+                // An outlined 17 dp symbol leaves breathing room inside the 32 dp tile.
+                c.translate(getWidth()/2f,getHeight()/2f);
+                float scale=Math.min(getWidth(),getHeight())/32f;
+                c.scale(scale,scale);c.translate(-12f,-12f);
+                float stroke=pen.getStrokeWidth();pen.setStrokeWidth(1.9f);
+                c.drawArc(new RectF(4.5f,4.5f,19.5f,19.5f),45f,280f,false,pen);
+                Path arrow=new Path();
+                arrow.moveTo(14.3f,6f);arrow.lineTo(18.1f,7.7f);arrow.lineTo(18.6f,3.6f);
+                c.drawPath(arrow,pen);pen.setStrokeWidth(stroke);c.restore();return;
+            }
+            c.translate(getWidth()*.2f,getHeight()*.2f);c.scale(getWidth()*.6f/24,getHeight()*.6f/24);
+            if(id==6){c.drawRoundRect(new RectF(3,5,21,20),2,2,pen);c.drawCircle(8,9,1.2f,pen);Path p=new Path();p.moveTo(4,18);p.lineTo(10,12);p.lineTo(14,16);p.lineTo(17,13);p.lineTo(20,16);c.drawPath(p,pen);c.drawArc(new RectF(11,2,21,12),155,245,false,pen);Path arrow=new Path();arrow.moveTo(11,4);arrow.lineTo(11,8);arrow.lineTo(15,8);c.drawPath(arrow,pen);}
             else if(id==2){Path p=new Path();p.moveTo(3,11);p.lineTo(12,3);p.lineTo(21,11);p.moveTo(6,10);p.lineTo(6,21);p.lineTo(18,21);p.lineTo(18,10);p.moveTo(10,21);p.lineTo(10,15);p.lineTo(14,15);p.lineTo(14,21);c.drawPath(p,pen);}
             else if(id==16){c.drawCircle(12,12,9,pen);c.drawPoint(12,7,pen);c.drawLine(12,11,12,17,pen);}
             else if(id==17){Path p=new Path();p.moveTo(14,2);p.lineTo(5,14);p.lineTo(11,14);p.lineTo(10,22);p.lineTo(20,10);p.lineTo(13,10);p.close();c.drawPath(p,pen);}

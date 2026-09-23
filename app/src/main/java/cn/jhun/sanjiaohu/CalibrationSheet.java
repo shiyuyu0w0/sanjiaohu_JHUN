@@ -10,14 +10,14 @@ final class CalibrationSheet {
     final MainActivity a;final UiSheet sheet;final String anchorKey;
     LocalDate selected;YearMonth month;int mode=0,yearStart;
     CalibrationSheet(MainActivity activity){
-        a=activity;anchorKey=a.anchorKey();selected=a.anchor();if(selected==null)selected=monday(a.today());month=YearMonth.from(selected);yearStart=month.getYear()-5;
+        a=activity;anchorKey=a.anchorKey();selected=a.anchor();month=YearMonth.from(selected==null?a.today():selected);yearStart=month.getYear()-5;
         sheet=new UiSheet(a,"周次校准",a.activeSchedule().term,.84f);
-        sheet.actions(a,"保存校准",()->{a.prefs.edit().putString(anchorKey,selected.toString()).apply();a.selectedWeek=a.currentWeek();sheet.dialog.dismiss();a.render();});draw();a.showSheet(sheet);
+        sheet.actions(a,"保存校准",()->{if(selected==null){Toast.makeText(a,"请先点选开学第一周",Toast.LENGTH_SHORT).show();return;}a.prefs.edit().putString(anchorKey,selected.toString()).apply();a.selectedWeek=a.currentWeek();sheet.dialog.dismiss();a.render();});draw();a.showSheet(sheet);
     }
     static LocalDate monday(LocalDate day){return day.minusDays(day.getDayOfWeek().getValue()-1);}
     void draw(){
         LinearLayout body=sheet.body;body.removeAllViews();
-        LinearLayout selection=a.column();selection.setPadding(a.dp(16),a.dp(14),a.dp(16),a.dp(14));selection.setBackground(a.shape(a.palette.entrySurface,18));selection.addView(a.label("第 1 教学周 · 周一",12,a.palette.deepAccent,false));a.space(selection,6);selection.addView(a.label(selected.format(DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")),22,a.INK,true));body.addView(selection);a.space(body,14);
+        LinearLayout selection=a.column();selection.setPadding(a.dp(16),a.dp(14),a.dp(16),a.dp(14));selection.setBackground(a.shape(a.palette.entrySurface,18));selection.addView(a.label(selected==null?"尚未选择 · 请点选开学第一周":"第 1 教学周 · 周一",12,a.palette.deepAccent,false));a.space(selection,6);selection.addView(a.label(selected==null?"请选择日期":selected.format(DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")),22,a.INK,true));body.addView(selection);a.space(body,14);
         LinearLayout bar=a.row();bar.addView(a.button("‹",()->{if(mode==1)yearStart-=12;else if(mode==2)month=month.minusYears(1);else month=month.minusMonths(1);draw();}),new LinearLayout.LayoutParams(a.dp(44),a.dp(44)));
         String title=mode==1?yearStart+"—"+(yearStart+11):mode==2?month.getYear()+" 年":month.getYear()+" 年 "+month.getMonthValue()+" 月  ⌄";
         bar.addView(a.button(title,()->{if(mode==0){yearStart=month.getYear()-5;mode=1;}else mode=0;draw();}),new LinearLayout.LayoutParams(0,a.dp(44),1));bar.addView(a.button("›",()->{if(mode==1)yearStart+=12;else if(mode==2)month=month.plusYears(1);else month=month.plusMonths(1);draw();}),new LinearLayout.LayoutParams(a.dp(44),a.dp(44)));body.addView(bar);a.space(body,8);
@@ -34,6 +34,6 @@ final class CalibrationSheet {
                 }body.addView(line);a.space(body,5);
             }
         }
-        a.space(body,10);body.addView(a.label("点选开学第一周，自动取该周周一。点击年月可快速切换。",12,a.MUTED,false));a.space(body,8);body.addView(a.button("定位已选日期",()->{month=YearMonth.from(selected);mode=0;yearStart=month.getYear()-5;draw();}),new LinearLayout.LayoutParams(-1,a.dp(40)));
+        a.space(body,10);body.addView(a.label("点选开学第一周，自动取该周周一。点击年月可快速切换。",12,a.MUTED,false));a.space(body,8);body.addView(a.button(selected==null?"返回本月":"定位已选日期",()->{month=YearMonth.from(selected==null?a.today():selected);mode=0;yearStart=month.getYear()-5;draw();}),new LinearLayout.LayoutParams(-1,a.dp(40)));
     }
 }
