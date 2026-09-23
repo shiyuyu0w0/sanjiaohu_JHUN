@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "manifestRevision": 5,
-  "enabled": false,
+  "manifestRevision": 6,
+  "enabled": true,
   "channel": "stable",
   "packageName": "cn.jhun.sanjiaohu",
   "versionCode": 46,
