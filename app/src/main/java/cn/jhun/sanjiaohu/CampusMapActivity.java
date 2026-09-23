@@ -46,7 +46,7 @@ public final class CampusMapActivity extends Activity {
         header.addView(action("‹","返回",()->back()),new LinearLayout.LayoutParams(dp(44),dp(44)));
         LinearLayout titles=new LinearLayout(this);titles.setOrientation(LinearLayout.VERTICAL);titles.setPadding(dp(14),0,dp(8),0);
         TextView title=text("校园地图",21,theme.text);title.setTypeface(Typeface.create("sans-serif-medium",0));titles.addView(title);titles.addView(text("江汉大学",12,theme.muted));header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
-        header.addView(action("↻","重新加载地图",()->reload()),new LinearLayout.LayoutParams(dp(44),dp(44)));root.addView(header);
+        header.addView(RefreshIconButton.create(this,theme,"重新加载地图",()->reload()),new LinearLayout.LayoutParams(dp(44),dp(44)));root.addView(header);
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(100);progress.setProgressTintList(ColorStateList.valueOf(theme.primary));root.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
         body=new FrameLayout(this);root.addView(body,new LinearLayout.LayoutParams(-1,0,1));
         errorPanel=new LinearLayout(this);errorPanel.setOrientation(LinearLayout.VERTICAL);errorPanel.setGravity(Gravity.CENTER);errorPanel.setPadding(dp(28),dp(24),dp(28),dp(24));errorPanel.setBackgroundColor(theme.surface);

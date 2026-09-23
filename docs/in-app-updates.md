@@ -1,8 +1,8 @@
 # 三角狐应用内更新与发布
 
-## 本次接入
+## 更新功能
 
-客户端版本为 **1.1.2（versionCode 45）**。入口是「个人 → 关于」中版本号左侧的「检查更新」小按钮。点击直接检查，没有独立更新页面；无可用更新时只显示简短提示，有新版本时弹出下载及安装提示，跟随应用主题及深色模式。
+当前客户端版本为 **1.1.3（versionCode 46）**。入口是「个人 → 关于」中版本号左侧的「检查更新」小按钮。点击直接检查，没有独立更新页面；无可用更新时只显示简短提示，有新版本时弹出下载及安装提示，跟随应用主题及深色模式。
 
 - 手动检查立即执行；进入前台距上次成功检查超过 24 小时才自动检查。失败后的自动尝试至少间隔 15 分钟，手动检查不受此限制。
 - 自动发现新版本，在个人页关于入口和关于页显示标记，不弹窗打断使用。
@@ -10,7 +10,7 @@
 - 下载交给 Android DownloadManager，应用关闭后可以继续下载。回到关于页时恢复任务，点击检查更新可查看进度或安装；自定义线路切换不会在应用进程结束后自行运行。
 - 校验完成后显示「立即安装」。用户点击、授予安装权限并在 Android 系统界面确认后才能覆盖安装。
 
-**现有 1.1.1 没有此更新功能，需要先手动安装一次 1.1.2；以后从 1.1.2 升到更高版本才能在应用里完成。** 同一版本不会提示更新。
+**应用内更新从 1.1.2 开始支持。现有 1.1.1 没有此功能，需要先手动安装 1.1.3；以后才能在应用里完成升级。** 同一版本不会提示更新。
 
 本地已生成 `updates/stable/version.json`，初始 `enabled` 为 `false`。脚本和本地构建均不会创建 GitHub Release，也不会提交或推送仓库。
 
@@ -26,7 +26,7 @@
 
 APK 只接受本仓库 `releases/download/v版本号/Sanjiaohu-版本号.apk` 和套在该地址外的 `https://ghproxy.net/` 代理。公共代理可用性不作保证，官方直链始终保留。检查请求不附带学校登录 Cookie 或 GitHub Token。
 
-## 第一次发布 1.1.2
+## 发布当前版本 1.1.3
 
 在项目根目录打开 PowerShell。先确认当前根目录 APK 是要发布的最终文件；清单生成之后不要再次构建或重新签名这一份 APK，否则哈希会变化。
 
@@ -40,29 +40,29 @@ APK 只接受本仓库 `releases/download/v版本号/Sanjiaohu-版本号.apk` �
 
 ```powershell
 ./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.2.apk `
-  -ManifestRevision 2 `
-  -NotesFile ./updates/release-notes-1.1.2.txt
+  -Apk ./Sanjiaohu-1.1.3.apk `
+  -ManifestRevision 6 `
+  -NotesFile ./updates/release-notes-1.1.3.txt
 
 ./scripts/verify-update.ps1 -Offline
 ```
 
 不传 `-Enable` 时清单保持关闭。仓库里已有修订号时，新值必须比它大。`-Offline` 验证本地签名、包名、版本、最低 Android 版本、大小和 SHA-256，不检查网络线路。
 
-下文修订号仅作示例，请先查看本地及线上清单，使用比两者都大的值。本次调整按钮后，本地清单修订号已递增。
+下文修订号仅作示例，请先查看本地及线上清单，使用比两者都大的值。重新构建 APK 后应再次生成清单。
 
 ### 2. 上传 GitHub Release
 
 在 `shiyuyu0w0/sanjiaohu_JHUN` 创建 Release：
 
-- 标签：`v1.1.2`
-- 附件：项目根目录的 `Sanjiaohu-1.1.2.apk`
-- 更新说明可使用 `updates/release-notes-1.1.2.txt`。
+- 标签：`v1.1.3`
+- 附件：项目根目录的 `Sanjiaohu-1.1.3.apk`
+- 更新说明可使用 `updates/release-notes-1.1.3.txt`。
 
 发布后，官方 APK 地址应为：
 
 ```text
-https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.2/Sanjiaohu-1.1.2.apk
+https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.3/Sanjiaohu-1.1.3.apk
 ```
 
 只能上传最终签名 APK，签名密钥和密码不要上传。
@@ -71,37 +71,37 @@ https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.2/Sanjiaohu-
 
 ```powershell
 ./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.2.apk `
-  -ManifestRevision 3 `
-  -NotesFile ./updates/release-notes-1.1.2.txt `
+  -Apk ./Sanjiaohu-1.1.3.apk `
+  -ManifestRevision 7 `
+  -NotesFile ./updates/release-notes-1.1.3.txt `
   -Enable
 ```
 
 此命令先从官方和代理各下载一遍，确认它们与本地签名 APK 的大小、SHA-256 一致，才写入 `enabled: true`。任何线路返回错误页、未上传、超时或文件不一致，都不会覆盖已有清单。
 
-命令成功后，把代码及 `updates/stable/version.json` 正常提交并推送到 `main`。清单只存在本地时，手机无法读取它。首次发布的 1.1.2 对已安装 1.1.2 的手机不应显示可升级，这是正常行为。
+命令成功后，把代码及 `updates/stable/version.json` 正常提交并推送到 `main`。清单只存在本地时，手机无法读取它。已安装 1.1.3 的手机不会再收到 1.1.3 的更新提示。
 
 ## 以后每次发布
 
-以 1.1.3 为例：
+以 1.1.4 为例：
 
-1. 同时更新 `app/build.gradle` 和 `app/src/main/AndroidManifest.xml`：`versionName` 改成 1.1.3，`versionCode` 改成 46。实际值要高于所有已发布版本，不能只改显示名称。
+1. 同时更新 `app/build.gradle` 和 `app/src/main/AndroidManifest.xml`：`versionName` 改成 1.1.4，`versionCode` 改成 47。实际值要高于所有已发布版本，不能只改显示名称。
 2. 更新关于页说明、相应测试的版本预期，以及两个构建/重签名脚本的默认输出文件名。
 3. 新建更新说明文本，每行一条，不需要自己写圆点或 JSON。
-4. 使用原签名密钥构建最终 APK；上传 `v1.1.3` Release，附件名必须为 `Sanjiaohu-1.1.3.apk`。
+4. 使用原签名密钥构建最终 APK；上传 `v1.1.4` Release，附件名必须为 `Sanjiaohu-1.1.4.apk`。
 5. 从当前线上修订号继续递增，运行：
 
 ```powershell
 ./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.3.apk `
-  -ManifestRevision 4 `
-  -NotesFile ./updates/release-notes-1.1.3.txt `
+  -Apk ./Sanjiaohu-1.1.4.apk `
+  -ManifestRevision 8 `
+  -NotesFile ./updates/release-notes-1.1.4.txt `
   -Enable
 
-./scripts/verify-update.ps1 -Apk ./Sanjiaohu-1.1.3.apk
+./scripts/verify-update.ps1 -Apk ./Sanjiaohu-1.1.4.apk
 ```
 
-6. 提交并推送清单到 `main`。在已安装 1.1.2 的手机上检查更新、下载、确认安装，核对升级后版本及课表等本地数据。
+6. 提交并推送清单到 `main`。在已安装 1.1.3 的手机上检查更新、下载、确认安装，核对升级后版本及课表等本地数据。
 
 不要用旧的修订号修改清单内容；不要替换已发布版本的 APK 字节。需要修复时发布更高 `versionCode` 的版本。
 
@@ -111,9 +111,9 @@ https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.2/Sanjiaohu-
 
 ```powershell
 ./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.3.apk `
-  -ManifestRevision 5 `
-  -NotesFile ./updates/release-notes-1.1.3.txt
+  -Apk ./Sanjiaohu-1.1.4.apk `
+  -ManifestRevision 9 `
+  -NotesFile ./updates/release-notes-1.1.4.txt
 ```
 
 省略 `-Enable` 即关闭。客户端下一次取得新清单后停止推荐并取消不再适用的下载。缓存与离线设备可能暂时看不到撤回，因此不能保证即时撤回，也不能降级已经安装新版的手机。

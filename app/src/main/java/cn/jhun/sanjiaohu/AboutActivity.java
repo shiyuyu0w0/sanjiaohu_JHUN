@@ -16,9 +16,12 @@ import java.io.InputStream;
 
 /** Offline about page; the sponsor image is bundled byte-for-byte as supplied. */
 public final class AboutActivity extends Activity {
-    /** What users can see and use in this release; plain wording, no version-by-version history. */
+    /** Main changes in each released version, newest first. */
     static final String[][] UPDATES={
-        {"v1.1.2","- 应用更新：在关于页检查新版本，支持加速和官方两条下载线路，下载后由系统确认覆盖升级。\n- 课表：同步后保存在本地，支持滑动切周与自定义课程。\n- 成绩：查看学期成绩和汇总。\n- 考试查询：显示考试时间、地点、座位和倒计时。\n- 电费：选择宿舍房间后查看空调与照明电量，支持分别缴费。\n- 校园地图与校历：查看校园地点、当前位置和学期安排。\n- 网上报修：进入学校报修服务。\n- 大物实验报告：在校园网内提交实验报告。\n- 登录：保存账号后方便再次进入学校服务。\n- 外观：支持主题配色、壁纸与深色模式。\n- 本页：查看更新内容和技术支持。"},
+        {"v1.1.3","- 统一优化刷新按钮和课程更多菜单的图标。\n- 调整学期选择的文字与下拉箭头位置。\n- 首页标题与三角狐标识对齐。\n- 为每项考试安排加入底色，方便区分。"},
+        {"v1.1.2","- 在关于页直接检查新版本。\n- 支持加速线路与 GitHub 官方线路下载安装包。\n- 下载完成后校验安装包，由系统确认覆盖安装。\n- 关于页按版本展示更新内容。"},
+        {"v1.1.1","- 修复部分同学课表获取不完整的问题。\n- 修复校园地图无法获取当前位置的问题。\n- 优化留学生公寓、研究生公寓和食堂公寓的电费查询与缴费。\n- 修复同名楼栋可能跨校区合并的问题。"},
+        {"v1.1.0","- 新增考试查询，展示考试时间、地点和倒计时。\n- 新增宿舍空调与照明电量查询和分别缴费。\n- 修复支付宝跳转和大物实验报告文件提交问题。\n- 支持跟随系统深色模式，并在关于页加入技术支持信息。"},
     };
     /** Technical-support names shown under the「技术支持」heading. */
     static final String[] SUPPORT={"广","yy792e"};
@@ -50,7 +53,7 @@ public final class AboutActivity extends Activity {
         TextView updateEntry=text("检查更新",12,theme.deepAccent,true);updateEntry.setGravity(Gravity.CENTER);updateEntry.setSingleLine(true);updateEntry.setPadding(dp(10),dp(7),dp(10),dp(7));updateEntry.setMinHeight(dp(36));updateEntry.setFocusable(true);updateEntry.setBackground(new RippleDrawable(ColorStateList.valueOf((theme.primary&0xffffff)|0x22000000),shape(theme.controlSurface,12),shape(theme.rippleMask,12)));LinearLayout.LayoutParams updateSize=new LinearLayout.LayoutParams(-2,-2);updateSize.rightMargin=dp(10);version.addView(updateEntry,updateSize);updatePrompt=new UpdatePrompt(this,theme,updateEntry,saved);updateEntry.setOnClickListener(v->updatePrompt.check());
         version.addView(text(current.startsWith("v")?current:"v"+current,18,theme.deepAccent,true));content.addView(version);gap(content,16);
         LinearLayout updates=card();TextView updatesTitle=text("更新内容",22,theme.deepAccent,true);updatesTitle.setGravity(Gravity.CENTER);updates.addView(updatesTitle,new LinearLayout.LayoutParams(-1,-2));
-        for(String[] entry:UPDATES){updates.addView(text(entry[0],15,theme.deepAccent,true),new LinearLayout.LayoutParams(-1,-2));TextView body=text(entry[1],13,ThemePalette.readable(theme.text,theme.entrySurface,7),false);body.setLineSpacing(dp(5),1);body.setPadding(0,dp(10),0,0);updates.addView(body,new LinearLayout.LayoutParams(-1,-2));}
+        for(int i=0;i<UPDATES.length;i++){String[] entry=UPDATES[i];if(i>0)gap(updates,18);updates.addView(text(entry[0],16,theme.deepAccent,true),new LinearLayout.LayoutParams(-1,-2));TextView body=text(entry[1],13,ThemePalette.readable(theme.text,theme.entrySurface,7),false);body.setLineSpacing(dp(5),1);body.setPadding(0,dp(9),0,0);updates.addView(body,new LinearLayout.LayoutParams(-1,-2));}
         content.addView(updates);gap(content,16);
         LinearLayout support=card();support.setBackground(shape(theme.entrySurface,24));
         TextView supportTitle=text("技术支持",22,theme.deepAccent,true);supportTitle.setGravity(Gravity.CENTER);support.addView(supportTitle,new LinearLayout.LayoutParams(-1,-2));

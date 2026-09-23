@@ -62,6 +62,7 @@ public class MainActivity extends Activity {
     String examTerm="",examState="尚无本地考试安排 · 联网后获取",examPortalScript;
     final List<String> examTerms=new ArrayList<>();
     final List<TextView> examBadges=new ArrayList<>();
+    final List<LinearLayout> examCards=new ArrayList<>();
     TextView examPendingTitle;
     final List<Exams.Entry> examBadgeEntries=new ArrayList<>();
     final Runnable examClock=new Runnable(){public void run(){if(!inBackground&&page==4){updateExamBadges();handler.postDelayed(this,30000);}}};
@@ -279,7 +280,9 @@ public class MainActivity extends Activity {
     void showMenu(View anchor){
         if(page!=1)return;
         if(moreMenu!=null && moreMenu.isShowing()){moreMenu.dismiss();return;}
-        moreMenu=MoreMenu.show(this,anchor,palette,id->{switch(id){case 1:cancelSync();sync();break;case 2:changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;case 20:reviewSchedule();break;case 21:restoreSchedule();break;}});
+        boolean hasPreviousSchedule=false;
+        if(!selectedTerm.isEmpty())try{hasPreviousSchedule=academicStore.scheduleSnapshot(selectedTerm,"previous")!=null;}catch(Exception ignored){}
+        moreMenu=MoreMenu.show(this,anchor,palette,hasPreviousSchedule,id->{switch(id){case 1:cancelSync();sync();break;case 2:changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;case 21:restoreSchedule();break;}});
     }
     void refreshAppearance(){
         wallpaper=WallpaperStore.load(this);int primary=prefs.getBoolean("manualTheme",false)?prefs.getInt("manualThemeColor",0xff2ecbff):backgroundPrimary();
@@ -316,10 +319,14 @@ public class MainActivity extends Activity {
         if(page==3||page==4)mast.addView(themedButton("返回首页",()->switchPage(0),false),new LinearLayout.LayoutParams(-2,dp(40)));
         if(page==1){TextView menu=label("⋮",28,ACCENT_TEXT,true);menu.setGravity(Gravity.CENTER);menu.setContentDescription("更多选项");menu.setFocusable(true);menu.setOnClickListener(v->showMenu(v));mast.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48)));}screen.addView(mast);
         LinearLayout pageContent=column();screen.addView(pageContent,new LinearLayout.LayoutParams(-1,0,1));
-        TextView term=label(page==4?(examTerm.isEmpty()?"学校当前学期":examTerm)+" ⌄":page==1?(selectedTerm.isEmpty()?"选择学期":selectedTerm)+" ⌄":page==3?(gradeTerm.isEmpty()?"选择学期":gradeTerm)+" ⌄":page==0?"悠悠不山山 含含是散散":"教务账号与本机设置",12,MUTED,false);term.setPadding(dp(8),0,dp(8),dp(5));
-        if(page==1||page==3){term.setTextColor(palette.deepAccent);term.setMinHeight(dp(40));term.setGravity(Gravity.CENTER_VERTICAL);term.setBackground(shape(palette.entrySurface,12));term.setOnClickListener(v->chooseSemester(page==3));term.setFocusable(true);term.setContentDescription("选择学期，"+(page==3?gradeTerm:selectedTerm));}
-        if(page==4){term.setTextColor(palette.deepAccent);term.setMinHeight(dp(40));term.setGravity(Gravity.CENTER_VERTICAL);term.setBackground(shape(palette.entrySurface,12));term.setOnClickListener(v->chooseExamTerm());term.setFocusable(true);}
-        pageContent.addView(term,new LinearLayout.LayoutParams(-1,-2));
+        if(page==1||page==3||page==4){
+            String termName=page==4?(examTerm.isEmpty()?"学校当前学期":examTerm):page==3?(gradeTerm.isEmpty()?"选择学期":gradeTerm):(selectedTerm.isEmpty()?"选择学期":selectedTerm);
+            pageContent.addView(semesterControl(termName,page==4?"选择考试学期":"选择学期",()->{if(page==4)chooseExamTerm();else chooseSemester(page==3);}),new LinearLayout.LayoutParams(-1,dp(44)));
+        }else{
+            TextView subtitle=label(page==0?"悠悠不山山 含含是散散":"教务账号与本机设置",12,MUTED,false);
+            subtitle.setPadding(page==0?0:dp(8),0,dp(8),dp(5));
+            pageContent.addView(subtitle,new LinearLayout.LayoutParams(-1,-2));
+        }
         if(page==1){
             if(scheduleCandidate!=null)pageContent.addView(themedButton("发现课表更新 · 点击核对",()->reviewSchedule(),false),new LinearLayout.LayoutParams(-1,dp(40)));
             LinearLayout weekBar=row();previousWeekButton=button("‹",()->changeWeek(selectedWeek-1));previousWeekButton.setContentDescription("上一周");weekBar.addView(previousWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));
@@ -462,7 +469,7 @@ public class MainActivity extends Activity {
         sheet.actions(this,"学校当前学期",()->{sheet.dialog.dismiss();cancelSync();examTerm="";prefs.edit().remove("examTerm").apply();loadExams();render();sync();});showSheet(sheet);
     }
     View examsView(){
-        examBadges.clear();examBadgeEntries.clear();
+        examBadges.clear();examCards.clear();examBadgeEntries.clear();
         LinearLayout content=column();content.setPadding(dp(6),dp(14),dp(6),dp(18));
         LinearLayout summary=panel(),heading=row(),words=column();ZonedDateTime now=ZonedDateTime.now(Exams.ZONE);int pending=0;
         if(exams!=null)for(Exams.Entry e:exams.entries)if(!e.finished(now))pending++;
@@ -474,7 +481,7 @@ public class MainActivity extends Activity {
             TextView note=label(exams==null?"使用教务账号登录后自动获取。\n已有记录会先显示，刷新失败仍可查看。":"学校尚未发布考试，或本学期没有安排。\n可稍后刷新，或切换其他学期。",13,MUTED,false);note.setGravity(Gravity.CENTER);note.setLineSpacing(dp(5),1);empty.addView(note);content.addView(empty);
             if(exams==null&&!prefs.getBoolean("loginCompleted",false)&&!canAutoLogin()){space(content,12);content.addView(themedButton("登录教务账号",()->showLogin(),true),new LinearLayout.LayoutParams(-1,dp(48)));}
         }else for(Exams.Entry e:exams.ordered(now)){
-            LinearLayout card=panel();card.setPadding(dp(17),dp(18),dp(17),dp(18));LinearLayout first=row();
+            LinearLayout card=panel();card.setPadding(dp(17),dp(18),dp(17),dp(18));examCards.add(card);LinearLayout first=row();
             LinearLayout details=column();TextView name=label(e.name.replaceFirst("^\\[[^\\]]+\\]\\s*",""),16,INK,true);name.setLineSpacing(dp(3),1);details.addView(name);space(details,9);
             TextView time=label(e.rawTime.isEmpty()?"考试时间待公布":e.rawTime,12,palette.deepAccent,true);time.setLineSpacing(dp(3),1);details.addView(time);first.addView(details,new LinearLayout.LayoutParams(0,-2,1));
             TextView badge=label("",13,Color.WHITE,true);badge.setGravity(Gravity.CENTER);badge.setIncludeFontPadding(false);badge.setLineSpacing(dp(4),1);badge.setPadding(dp(3),dp(5),dp(3),dp(5));
@@ -487,7 +494,12 @@ public class MainActivity extends Activity {
     void updateExamBadges(){
         ZonedDateTime now=ZonedDateTime.now(Exams.ZONE);
         if(exams!=null&&examPendingTitle!=null){int pending=0;for(Exams.Entry e:exams.entries)if(!e.finished(now))pending++;examPendingTitle.setText(pending+" 门待考");}
-        for(int i=0;i<examBadges.size();i++){TextView badge=examBadges.get(i);Exams.Entry e=examBadgeEntries.get(i);badge.setText(e.badge(now));badge.setBackground(shape(e.finished(now)?0xff237d50:e.date==null?0xff64748b:0xffc83b48,12));badge.setContentDescription(e.name+"，"+e.badge(now).replace('\n',' '));}
+        for(int i=0;i<examBadges.size();i++){
+            TextView badge=examBadges.get(i);Exams.Entry e=examBadgeEntries.get(i);int stateColor=e.finished(now)?0xff237d50:e.date==null?0xff64748b:0xffc83b48;
+            badge.setText(e.badge(now));badge.setBackground(shape(stateColor,12));badge.setContentDescription(e.name+"，"+e.badge(now).replace('\n',' '));
+            int surface=ThemePalette.mix(palette.panel,stateColor,palette.dark?.18:.10);
+            GradientDrawable cardBackground=shape(surface,22);cardBackground.setStroke(dp(1),ThemePalette.mix(surface,stateColor,palette.dark?.28:.20));examCards.get(i).setBackground(cardBackground);
+        }
     }
     View gradesView(){
         LinearLayout content=column();content.setPadding(dp(6),dp(14),dp(6),dp(18));
@@ -512,6 +524,18 @@ public class MainActivity extends Activity {
         return content;
     }
     String displayValue(String value){return value==null||value.trim().isEmpty()?"—":value;}
+    View semesterControl(String termName,String actionName,Runnable action){
+        LinearLayout control=row();control.setPadding(dp(14),0,dp(10),0);
+        GradientDrawable surface=shape(palette.entrySurface,12);surface.setStroke(dp(1),palette.outline);
+        control.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),surface,shape(palette.rippleMask,12)));
+        TextView name=label(termName,14,palette.deepAccent,true);name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);name.setGravity(Gravity.CENTER_VERTICAL);name.setIncludeFontPadding(false);
+        control.addView(name,new LinearLayout.LayoutParams(0,-1,1));
+        View arrow=new View(this){final android.graphics.Paint pen=new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            @Override protected void onDraw(android.graphics.Canvas canvas){super.onDraw(canvas);pen.setColor(palette.deepAccent);pen.setStyle(android.graphics.Paint.Style.STROKE);pen.setStrokeWidth(dp(2));pen.setStrokeCap(android.graphics.Paint.Cap.ROUND);pen.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+                float x=getWidth()/2f,y=getHeight()/2f;canvas.drawLine(x-dp(5),y-dp(2),x,y+dp(3),pen);canvas.drawLine(x,y+dp(3),x+dp(5),y-dp(2),pen);}
+        };arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);control.addView(arrow,new LinearLayout.LayoutParams(dp(24),dp(24)));
+        control.setContentDescription(actionName+"，"+termName);control.setFocusable(true);control.setOnClickListener(v->action.run());return control;
+    }
     View iconButton(String title,int id,Runnable action){
         FrameLayout hit=new FrameLayout(this);MoreMenu.Icon icon=new MoreMenu.Icon(this,id,palette.deepAccent);icon.setBackground(shape(palette.entrySurface,11));icon.setDuplicateParentStateEnabled(true);hit.addView(icon,new FrameLayout.LayoutParams(dp(32),dp(32),Gravity.CENTER));hit.setContentDescription(title);hit.setFocusable(true);hit.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),null,shape(palette.rippleMask,12)));hit.setOnClickListener(v->action.run());return hit;
     }

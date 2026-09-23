@@ -1,9 +1,7 @@
 package cn.jhun.sanjiaohu;
 
-/** Data checks for the about page update notes and the technical-support names. */
+/** Checks that the about page presents an accurate version history. */
 public final class AboutChangelogTest {
-    static final String[] FEATURES={"课表","成绩","考试查询","电费","网上报修","大物实验报告",
-            "自定义课程","校园地图","校历","登录","外观","更新内容","技术支持","覆盖升级"};
     /** Wording that only makes sense to the author; the page must stay readable for students. */
     static final String[] JARGON={"AtomicFile","WebView","Cookie","DOM","重定向","端到端","签名指纹","回归"};
 
@@ -16,23 +14,30 @@ public final class AboutChangelogTest {
 
     public static void main(String[] args) {
         String[][] updates = AboutActivity.UPDATES;
-        check(updates.length == 1, "one update entry instead of a version history, got " + updates.length);
-        String title = updates[0][0];
-        String body = updates[0][1];
-        check("v1.1.2".equals(title), "entry is titled v1.1.2, got " + title);
-        check(!title.contains("当前版本") && !title.contains("首个公开版"), "title is just the version: " + title);
-        check(body.indexOf('\n') > 0, "entry body is a list of lines");
-        String[] lines = body.split("\n");
-        check(lines.length >= 9, "entry lists the features, got " + lines.length + " lines");
-        for (String line : lines) {
-            check(line.startsWith("- "), "line is a bullet item: " + line);
-            check(line.length() <= 90, "line stays short (" + line.length() + "): " + line);
+        String[] versions={"v1.1.3","v1.1.2","v1.1.1","v1.1.0"};
+        check(updates.length == versions.length, "one entry per known version");
+        for(int i=0;i<updates.length;i++){
+            String[] entry=updates[i];
+            check(entry.length==2,"version and notes for entry "+i);
+            if(entry.length!=2)continue;
+            check(i<versions.length&&versions[i].equals(entry[0]),"newest-first version order at "+i);
+            String[] lines=entry[1].split("\n");
+            check(lines.length>=2&&lines.length<=6,"brief main changes for "+entry[0]);
+            for(String line:lines){
+                check(line.startsWith("- "),"plain bullet for "+entry[0]);
+                check(line.length()<=90,"short line for "+entry[0]);
+            }
+            for(String jargon:JARGON)check(!entry[1].contains(jargon),"no internal wording in "+entry[0]+": "+jargon);
+            check(!entry[1].contains("\\n"),"real line breaks in "+entry[0]);
+            check(!entry[1].contains("`")&&!entry[1].contains("**"),"plain text in "+entry[0]);
         }
-        for (String feature : FEATURES) check(body.contains(feature), "update note mentions " + feature);
-        for (String jargon : JARGON) check(!body.contains(jargon), "update note avoids internal wording: " + jargon);
-        check(!body.contains("\\n"), "entry body uses real line breaks");
-        check(!body.contains("`") && !body.contains("**"), "entry body is plain text");
-        check(!body.contains("v1.0."), "no per-version history remains");
+        if(updates.length>=4){
+            check(updates[0][1].contains("刷新")&&updates[0][1].contains("考试"),"v1.1.3 records visual improvements");
+            check(updates[1][1].contains("检查新版本")&&updates[1][1].contains("安装包"),"v1.1.2 records the updater");
+            check(updates[2][1].contains("课表")&&updates[2][1].contains("跨校区"),"v1.1.1 records fixes");
+            check(updates[3][1].contains("考试查询")&&updates[3][1].contains("电量"),"v1.1.0 records new functions");
+            check(!updates[0][1].contains("检查新版本"),"v1.1.2 updater is not listed as new in v1.1.3");
+        }
         check(AboutActivity.SUPPORT.length == 2, "technical support lists two names");
         check("广".equals(AboutActivity.SUPPORT[0]), "first support name is 广");
         check("yy792e".equals(AboutActivity.SUPPORT[1]), "second support name is yy792e");
@@ -44,9 +49,6 @@ public final class AboutChangelogTest {
             Class<?> type = Class.forName("cn.jhun.sanjiaohu.AboutActivity");
             check(type.getDeclaredField("UPDATES").getType() == String[][].class, "about page reads its update notes");
             check(type.getDeclaredField("SUPPORT").getType() == String[].class, "about page reads its support names");
-            boolean legacy = false;
-            for (java.lang.reflect.Field field : type.getDeclaredFields()) if ("CHANGELOG".equals(field.getName())) legacy = true;
-            check(!legacy, "the per-version changelog field is gone");
         } catch (ClassNotFoundException e) {
             check(false, "about page class is on the classpath");
         } catch (NoSuchFieldException e) {

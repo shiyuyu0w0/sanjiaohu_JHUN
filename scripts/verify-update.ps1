@@ -1,6 +1,6 @@
 param(
     [string]$Manifest = "$PSScriptRoot/../updates/stable/version.json",
-    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.1.2.apk",
+    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.1.3.apk",
     [switch]$Offline,
     [string]$Java = 'C:/Program Files/Android/Android Studio/jbr',
     [string]$Sdk = "$env:LOCALAPPDATA/Android/Sdk",
