@@ -1,5 +1,5 @@
 param(
-    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.1.3.apk",
+    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.1.5.apk",
     [string]$Java = 'C:/Program Files/Android/Android Studio/jbr',
     [string]$Sdk = "$env:LOCALAPPDATA/Android/Sdk",
     [string]$BuildTools = '36.1.0'

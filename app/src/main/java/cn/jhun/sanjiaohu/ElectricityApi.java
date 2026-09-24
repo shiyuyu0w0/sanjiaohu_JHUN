@@ -24,6 +24,7 @@ class ElectricityApi {
     static final class Floor {
         final Branch branch;final Item level;final int kind;
         Floor(Branch b,Item l){branch=b;level=l;kind=ElectricityModel.kind(b.area.name,b.building.name,l.name);}
+        Floor(Floor source,int inferredKind){branch=source.branch;level=source.level;kind=inferredKind;}
     }
     static final class Meter {
         final Floor floor;final Item room;
@@ -128,7 +129,33 @@ class ElectricityApi {
     SortedMap<String,List<Meter>> rooms(List<Floor> floors)throws Exception{
         SortedMap<String,List<Meter>> out=new TreeMap<>();
         for(Floor f:floors)for(Item r:list(4,f.branch.area.id,f.branch.building.id,f.level.id))out.computeIfAbsent(ElectricityModel.room(r.name),k->new ArrayList<>()).add(new Meter(f,r));
+        for(List<Meter> candidates:out.values())inferMissingKind(candidates);
         if(out.isEmpty())throw new IOException("该楼层没有可选房间");return out;
+    }
+    // Some ordinary building names occur in both a dedicated lighting/AC area
+    // and the shared area, whose plain floor labels do not identify the meter.
+    // Infer the other kind only for an unambiguous, room-level directory pair.
+    // A lone unknown entry, a duplicate meter id, or more than two entries stays
+    // unknown rather than being assigned a payment destination by guesswork.
+    static void inferMissingKind(List<Meter> candidates){
+        if(candidates.size()!=2)return;
+        Meter a=candidates.get(0),b=candidates.get(1);
+        Meter known=a.floor.kind==ElectricityModel.UNKNOWN?b:a;
+        Meter unknown=a.floor.kind==ElectricityModel.UNKNOWN?a:b;
+        if(unknown.floor.kind!=ElectricityModel.UNKNOWN
+            ||(known.floor.kind!=ElectricityModel.AC&&known.floor.kind!=ElectricityModel.LIGHT)
+            ||known.room.id.equals(unknown.room.id))return;
+        Branch left=known.floor.branch,right=unknown.floor.branch;
+        if(left.area.id.equals(right.area.id))return;
+        // A dedicated area provides the positive type signal for the known
+        // meter; the mixed area alone cannot prove which meter is which.
+        String dedicated=left.area.name;
+        boolean dedicatedAc=dedicated.contains("空调"),dedicatedLight=dedicated.contains("照明")||dedicated.contains("灯光");
+        if(dedicatedAc==dedicatedLight||known.floor.kind!=(dedicatedAc?ElectricityModel.AC:ElectricityModel.LIGHT))return;
+        String area=right.area.name;
+        if(!area.contains("空调")||(!area.contains("照明")&&!area.contains("灯光")))return;
+        int kind=known.floor.kind==ElectricityModel.AC?ElectricityModel.LIGHT:ElectricityModel.AC;
+        candidates.set(candidates.indexOf(unknown),new Meter(new Floor(unknown.floor,kind),unknown.room));
     }
     Reading reading(Meter meter){
         try{

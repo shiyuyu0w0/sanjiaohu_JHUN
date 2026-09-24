@@ -13,6 +13,8 @@ public final class ElectricityModelTest {
         String[] keys={"","1","01","2","10","99","100","旧楼层"};
         for(String a:keys)for(String b:keys)for(String c:keys){if(ElectricityModel.compareFloors(a,b)<=0&&ElectricityModel.compareFloors(b,c)<=0)equal(true,ElectricityModel.compareFloors(a,c)<=0);}
         equal("2",ElectricityModel.floor("2层（空调）"));equal("10",ElectricityModel.floor("10层（照明）"));equal("0",ElectricityModel.floor("0层商业门店"));
+        equal("1单元",ElectricityModel.floor("1单元"));equal("5单元",ElectricityModel.floor("5 单元"));
+        equal("4 层",ElectricityModel.levelLabel("4"));equal("1单元",ElectricityModel.levelLabel("1单元"));
         equal(ElectricityModel.AC,ElectricityModel.kind("学生空调/南9-12北18-24空调和照明/商住区","北区16舍","2层（空调）"));
         equal(ElectricityModel.LIGHT,ElectricityModel.kind("北校区照明","北区16舍","2层"));
         equal(ElectricityModel.LIGHT,ElectricityModel.kind("学生空调/空调和照明","北区20舍","2层（照明）"));

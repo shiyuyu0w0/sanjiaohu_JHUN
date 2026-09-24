@@ -151,6 +151,64 @@ public final class ElectricityDormTest {
         equal(2,ElectricityApi.pair(source).get("北区16舍").size());
     }
 
+    static ElectricityApi.Branch branch(String areaId,String areaName,String buildingId,String buildingName){
+        return new ElectricityApi.Branch(new ElectricityApi.Item(areaId,areaName),new ElectricityApi.Item(buildingId,buildingName));
+    }
+    static ElectricityApi.Meter meter(ElectricityApi.Branch branch,String id){
+        return new ElectricityApi.Meter(new ElectricityApi.Floor(branch,new ElectricityApi.Item("4","4层")),new ElectricityApi.Item(id,"401"));
+    }
+    static void sharedAreaInference()throws Exception{
+        // Synthetic room-level directory for the school's shared area and a
+        // dedicated lighting area. The numbers are fixtures, not live readings.
+        ElectricityApi api=new ElectricityApi("synthetic","test"){
+            void permission(){}
+            List<Item> list(int type,String area,String building,String level){
+                if(type==3)return Collections.singletonList(new Item("4","4层"));
+                if(type==4)return Collections.singletonList(new Item(area+"-"+building+"--4-401","401"));
+                return Collections.emptyList();
+            }
+        };
+        for(String[] dorm:new String[][]{{"北区18舍","18","北校区照明"},{"南区9舍","9","南校区照明"}}){
+            String name=dorm[0],number=dorm[1];
+            ElectricityApi.Branch shared=branch("1",SHARED,number,name);
+            ElectricityApi.Branch lighting=branch("2",dorm[2],number+"L",name);
+            List<ElectricityApi.Floor> floors=api.floors(Arrays.asList(shared,lighting)).get("4");
+            equal(2,floors.size());
+            List<ElectricityApi.Meter> room=api.rooms(floors).get("401");
+            equal(2,room.size());
+            Map<Integer,ElectricityApi.Meter> byKind=new HashMap<>();
+            for(ElectricityApi.Meter m:room)byKind.put(m.floor.kind,m);
+            equal(2,byKind.size());
+            equal("1-"+number+"--4-401",byKind.get(ElectricityModel.AC).room.id);
+            equal("2-"+number+"L--4-401",byKind.get(ElectricityModel.LIGHT).room.id);
+            // Inference must not mutate the original floor for another room.
+            equal(ElectricityModel.UNKNOWN,floors.get(0).kind);
+        }
+        ElectricityApi.Branch shared=branch("1",SHARED,"18","北区18舍");
+        ElectricityApi.Branch lighting=branch("2","北校区照明","18L","北区18舍");
+        ElectricityApi.Branch cooling=branch("3","学生空调","18A","北区18舍");
+        List<ElectricityApi.Meter> lone=new ArrayList<>(Collections.singletonList(meter(shared,"shared")));
+        ElectricityApi.inferMissingKind(lone);equal(ElectricityModel.UNKNOWN,lone.get(0).floor.kind);
+        List<ElectricityApi.Meter> sameId=new ArrayList<>(Arrays.asList(meter(shared,"same"),meter(lighting,"same")));
+        ElectricityApi.inferMissingKind(sameId);equal(ElectricityModel.UNKNOWN,sameId.get(0).floor.kind);
+        List<ElectricityApi.Meter> sameBranch=new ArrayList<>(Arrays.asList(meter(shared,"one"),meter(shared,"two")));
+        ElectricityApi.inferMissingKind(sameBranch);equal(ElectricityModel.UNKNOWN,sameBranch.get(0).floor.kind);
+        ElectricityApi.Meter explicitLight=new ElectricityApi.Meter(
+            new ElectricityApi.Floor(shared,new ElectricityApi.Item("4L","4层（照明）")),
+            new ElectricityApi.Item("light","401"));
+        sameBranch=new ArrayList<>(Arrays.asList(meter(shared,"one"),explicitLight));
+        ElectricityApi.inferMissingKind(sameBranch);equal(ElectricityModel.UNKNOWN,sameBranch.get(0).floor.kind);
+        ElectricityApi.Branch other=branch("4","商住区","18X","北区18舍");
+        List<ElectricityApi.Meter> unspecifiedArea=new ArrayList<>(Arrays.asList(meter(other,"other"),meter(lighting,"light")));
+        ElectricityApi.inferMissingKind(unspecifiedArea);equal(ElectricityModel.UNKNOWN,unspecifiedArea.get(0).floor.kind);
+        List<ElectricityApi.Meter> three=new ArrayList<>(Arrays.asList(meter(shared,"one"),meter(lighting,"two"),meter(cooling,"three")));
+        ElectricityApi.inferMissingKind(three);equal(ElectricityModel.UNKNOWN,three.get(0).floor.kind);
+        List<ElectricityApi.Meter> bothUnknown=new ArrayList<>(Arrays.asList(meter(shared,"one"),meter(shared,"two")));
+        ElectricityApi.inferMissingKind(bothUnknown);equal(ElectricityModel.UNKNOWN,bothUnknown.get(0).floor.kind);
+        List<ElectricityApi.Meter> reverse=new ArrayList<>(Arrays.asList(meter(cooling,"ac"),meter(shared,"unknown")));
+        ElectricityApi.inferMissingKind(reverse);equal(ElectricityModel.LIGHT,reverse.get(1).floor.kind);
+    }
+
     public static void main(String[] args)throws Exception{
         Fake api=new Fake();
         SortedMap<String,List<ElectricityApi.Branch>> buildings=api.buildings();
@@ -265,6 +323,7 @@ public final class ElectricityDormTest {
         equal(2,canteenMerged.get("食堂公寓").size());
 
         areaPairing();
+        sharedAreaInference();
         System.out.println("Electricity dorm merge: "+checks+" checks passed");
     }
 }

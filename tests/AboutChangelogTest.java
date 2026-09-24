@@ -14,7 +14,7 @@ public final class AboutChangelogTest {
 
     public static void main(String[] args) {
         String[][] updates = AboutActivity.UPDATES;
-        String[] versions={"v1.1.4","v1.1.3","v1.1.2","v1.1.1","v1.1.0"};
+        String[] versions={"v1.1.5","v1.1.4","v1.1.3","v1.1.2","v1.1.1","v1.1.0"};
         check(updates.length == versions.length, "one entry per known version");
         for(int i=0;i<updates.length;i++){
             String[] entry=updates[i];
@@ -31,13 +31,14 @@ public final class AboutChangelogTest {
             check(!entry[1].contains("\\n"),"real line breaks in "+entry[0]);
             check(!entry[1].contains("`")&&!entry[1].contains("**"),"plain text in "+entry[0]);
         }
-        if(updates.length>=5){
-            check(updates[0][1].contains("校准")&&updates[0][1].contains("实验报告"),"v1.1.4 records schedule and upload fixes");
-            check(updates[1][1].contains("刷新")&&updates[1][1].contains("考试"),"v1.1.3 records visual improvements");
-            check(updates[2][1].contains("检查新版本")&&updates[2][1].contains("安装包"),"v1.1.2 records the updater");
-            check(updates[3][1].contains("课表")&&updates[3][1].contains("跨校区"),"v1.1.1 records fixes");
-            check(updates[4][1].contains("考试查询")&&updates[4][1].contains("电量"),"v1.1.0 records new functions");
-            check(!updates[1][1].contains("检查新版本"),"v1.1.2 updater is not listed as new in v1.1.3");
+        if(updates.length>=6){
+            check(updates[0][1].contains("北区18舍")&&updates[0][1].contains("电表"),"v1.1.5 records dorm meter fixes");
+            check(updates[1][1].contains("校准")&&updates[1][1].contains("实验报告"),"v1.1.4 records schedule and upload fixes");
+            check(updates[2][1].contains("刷新")&&updates[2][1].contains("考试"),"v1.1.3 records visual improvements");
+            check(updates[3][1].contains("检查新版本")&&updates[3][1].contains("安装包"),"v1.1.2 records the updater");
+            check(updates[4][1].contains("课表")&&updates[4][1].contains("跨校区"),"v1.1.1 records fixes");
+            check(updates[5][1].contains("考试查询")&&updates[5][1].contains("电量"),"v1.1.0 records new functions");
+            check(!updates[2][1].contains("检查新版本"),"v1.1.2 updater is not listed as new in v1.1.3");
         }
         check(AboutActivity.SUPPORT.length == 2, "technical support lists two names");
         check("广".equals(AboutActivity.SUPPORT[0]), "first support name is 广");

@@ -39,9 +39,15 @@ final class ElectricityModel {
         return left.compareTo(right);
     }
     static String floor(String name){
-        Matcher m=Pattern.compile("^(\\d{1,2})\\s*层.*$").matcher(name.trim());
-        return m.matches()?m.group(1):null;
+        String value=name.trim();
+        Matcher m=Pattern.compile("^(\\d{1,2})\\s*层.*$").matcher(value);
+        if(m.matches())return m.group(1);
+        // South 10–12 use the school's unit as level 3, with floor encoded in
+        // the room number. Keep that level selectable instead of dropping it.
+        m=Pattern.compile("^(\\d{1,2})\\s*单元$").matcher(value);
+        return m.matches()?m.group(1)+"单元":null;
     }
+    static String levelLabel(String key){return key.endsWith("单元")?key:key+" 层";}
     static int kind(String area,String building,String level){
         String specific=building+" "+level;
         boolean ac=specific.contains("空调"),light=specific.contains("照明")||specific.contains("灯光");

@@ -1,28 +1,26 @@
 {
   "schemaVersion": 1,
-  "manifestRevision": 7,
+  "manifestRevision": 8,
   "enabled": true,
   "channel": "stable",
   "packageName": "cn.jhun.sanjiaohu",
-  "versionCode": 47,
-  "versionName": "1.1.4",
+  "versionCode": 48,
+  "versionName": "1.1.5",
   "minSdk": 26,
   "releaseNotes": [
-    "未校准周次时显示全部课程，同一时段并排展示。",
-    "周次校准需手动选择第一教学周。",
-    "修复实验报告选择相册图片后无法上传的问题。",
-    "调整刷新图标的大小与线条。"
+    "修复北区18舍、南区9舍空调电表无法识别的问题。",
+    "支持南区10–12舍按单元选房，显示学校未标类型的宿舍电表。"
   ],
-  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.1.4",
+  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.1.5",
   "apk": {
-    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.4/Sanjiaohu-1.1.4.apk",
+    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.5/Sanjiaohu-1.1.5.apk",
     "sizeBytes": 2545608,
-    "sha256": "630e6dee5f03205cdef7091105cd5c33aa51a5cf2e6449f40f1087ab08ec9c3b",
+    "sha256": "d05f97311c623a873427e5dd4b320d958796b0b50c3b44afbd90822fceb7c004",
     "mirrors": [
       {
         "id": "ghproxy",
         "name": "Accelerated",
-        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.4/Sanjiaohu-1.1.4.apk"
+        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.5/Sanjiaohu-1.1.5.apk"
       }
     ]
   }
