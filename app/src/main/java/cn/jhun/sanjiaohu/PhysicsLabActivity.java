@@ -3,6 +3,7 @@ package cn.jhun.sanjiaohu;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
@@ -21,6 +22,11 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.*;
 import android.widget.*;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** In-app browser for the physics lab report service. The site answers only inside the campus
  *  network, so every failed main-frame load raises the "请连接校园网" notice. */
@@ -34,10 +40,15 @@ public final class PhysicsLabActivity extends Activity {
     TextView errorText;
     Dialog notice;
     ValueCallback<Uri[]> fileCallback;
+    String uploadCompat="";
+    final ExecutorService fileIo=Executors.newSingleThreadExecutor();
     boolean failed;
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
+        try(InputStream input=getAssets().open("physics-upload-compat.js");ByteArrayOutputStream output=new ByteArrayOutputStream()){
+            byte[] buffer=new byte[4096];int count;while((count=input.read(buffer))!=-1)output.write(buffer,0,count);uploadCompat=output.toString("UTF-8");
+        }catch(Exception ignored){}
         theme=AppTheme.from(this,getSharedPreferences("settings",MODE_PRIVATE).getInt("themeColor",0xff2ecbff));
         AppTheme.applySystemBars(this,theme);
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(theme.surface);
@@ -66,16 +77,20 @@ public final class PhysicsLabActivity extends Activity {
             /** A web page can only open the phone's picker when the app answers this callback;
              *  the report form's 选择文件 button does nothing without it. */
             @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){
+                if(!PhysicsLabPolicy.reportSite(view.getUrl())){callback.onReceiveValue(null);return true;}
                 if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
-                Intent pick=params.createIntent();
-                pick.addCategory(Intent.CATEGORY_OPENABLE);pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                // Some forms pass bare extensions (".docx") as accept values; pickers match those
-                // against no MIME type and show an empty list. Fall back to any file.
-                String fallback=PhysicsLabPolicy.pickerType(params.getAcceptTypes());
-                if(fallback!=null){pick.setType(fallback);pick.removeExtra(Intent.EXTRA_MIME_TYPES);}
+                // The document picker consistently grants content:// access. Some gallery apps
+                // return only ClipData, which WebView's parseResult may not pass back to the page.
+                Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                pick.addCategory(Intent.CATEGORY_OPENABLE);
+                pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                String[] types=PhysicsLabPolicy.pickerMimeTypes(params.getAcceptTypes());
+                pick.setType(types.length==1?types[0]:"*/*");
+                if(types.length>1)pick.putExtra(Intent.EXTRA_MIME_TYPES,types);
+                pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,params.getMode()==FileChooserParams.MODE_OPEN_MULTIPLE);
                 fileCallback=callback;
                 try{startActivityForResult(pick,FILE_PICK);}
-                catch(ActivityNotFoundException e){fileCallback=null;callback.onReceiveValue(null);Toast.makeText(PhysicsLabActivity.this,"手机上没有可用的文件选择器",Toast.LENGTH_LONG).show();return false;}
+                catch(ActivityNotFoundException e){fileCallback=null;callback.onReceiveValue(null);Toast.makeText(PhysicsLabActivity.this,"手机上没有可用的文件选择器",Toast.LENGTH_LONG).show();}
                 return true;
             }
         });
@@ -86,11 +101,11 @@ public final class PhysicsLabActivity extends Activity {
                 Toast.makeText(PhysicsLabActivity.this,"仅允许打开校园网内的实验报告页面",Toast.LENGTH_SHORT).show();return true;
             }
             @Override public void onPageStarted(WebView view,String url,Bitmap icon){failed=false;dismissNotice();errorPanel.setVisibility(View.GONE);progress.setProgress(0);progress.setVisibility(View.VISIBLE);}
-            @Override public void onPageFinished(WebView view,String url){progress.setVisibility(View.INVISIBLE);CookieManager.getInstance().flush();}
-            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(request.isForMainFrame())fail(describe(error));}
-            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())fail("服务返回 "+response.getStatusCode());}
+            @Override public void onPageFinished(WebView view,String url){progress.setVisibility(View.INVISIBLE);CookieManager.getInstance().flush();if(PhysicsLabPolicy.reportSite(url)&&!uploadCompat.isEmpty())view.evaluateJavascript(uploadCompat,null);}
+            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(request.isForMainFrame())fail(describe(error));else if(PhysicsLabPolicy.uploadRequest(request.getUrl().toString()))Toast.makeText(PhysicsLabActivity.this,"报告上传未完成，请检查校园网连接后重试",Toast.LENGTH_LONG).show();}
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame())fail("服务返回 "+response.getStatusCode());else if(PhysicsLabPolicy.uploadRequest(request.getUrl().toString()))Toast.makeText(PhysicsLabActivity.this,"报告上传失败（"+response.getStatusCode()+"），请稍后重试",Toast.LENGTH_LONG).show();}
             @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,SslError error){handler.cancel();fail("安全连接失败");}
-            @Override public boolean onRenderProcessGone(WebView view,RenderProcessGoneDetail detail){body.removeView(view);view.destroy();web=null;fail("页面已中断");return true;}
+            @Override public boolean onRenderProcessGone(WebView view,RenderProcessGoneDetail detail){if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}body.removeView(view);view.destroy();web=null;fail("页面已中断");return true;}
         });
     }
     String describe(WebResourceError error){
@@ -139,12 +154,34 @@ public final class PhysicsLabActivity extends Activity {
     /** Result of the phone's picker: the page gets the chosen file, or null when cancelled. */
     @Override protected void onActivityResult(int request,int result,Intent data){
         if(request!=FILE_PICK){super.onActivityResult(request,result,data);return;}
-        ValueCallback<Uri[]> callback=fileCallback;fileCallback=null;
-        if(callback!=null)callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));
+        super.onActivityResult(request,result,data);
+        ValueCallback<Uri[]> callback=fileCallback;
+        if(callback==null)return;
+        if(result!=RESULT_OK){fileCallback=null;callback.onReceiveValue(null);return;}
+        ArrayList<Uri> chosen=new ArrayList<>();
+        if(data!=null){
+            ClipData clips=data.getClipData();
+            if(clips!=null)for(int i=0;i<clips.getItemCount();i++)addChosen(chosen,clips.getItemAt(i).getUri());
+            addChosen(chosen,data.getData());
+        }
+        if(chosen.isEmpty()){fileCallback=null;callback.onReceiveValue(null);Toast.makeText(this,"没有获取到图片，请从文件管理器重新选择",Toast.LENGTH_LONG).show();return;}
+        fileIo.execute(()->{
+            ArrayList<Uri> readable=new ArrayList<>();
+            for(Uri uri:chosen){try(InputStream input=getContentResolver().openInputStream(uri)){if(input!=null&&input.read()!=-1)readable.add(uri);}catch(Exception ignored){}}
+            runOnUiThread(()->{
+                if(fileCallback!=callback||isDestroyed())return;
+                Uri[] files=readable.isEmpty()?null:readable.toArray(new Uri[0]);
+                // Install the scoped page fix before its onchange sees the returned files.
+                if(web!=null&&PhysicsLabPolicy.reportSite(web.getUrl())&&!uploadCompat.isEmpty())web.evaluateJavascript(uploadCompat,ignored->{if(fileCallback==callback&&!isDestroyed()){fileCallback=null;callback.onReceiveValue(files);}});
+                else{fileCallback=null;callback.onReceiveValue(files);}
+                if(readable.isEmpty())Toast.makeText(this,"无法读取所选图片，请换一张或从文件管理器选择",Toast.LENGTH_LONG).show();
+            });
+        });
     }
+    void addChosen(ArrayList<Uri> chosen,Uri uri){if(uri!=null&&"content".equals(uri.getScheme())&&!chosen.contains(uri))chosen.add(uri);}
     @Override protected void onPause(){if(web!=null)web.onPause();super.onPause();}
     @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
-    @Override protected void onDestroy(){dismissNotice();if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}if(web!=null){body.removeView(web);web.stopLoading();web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){dismissNotice();if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}fileIo.shutdownNow();if(web!=null){body.removeView(web);web.stopLoading();web.destroy();web=null;}super.onDestroy();}
     TextView action(String label,String description,Runnable run){
         TextView button=text(label,label.length()>1?14:24,theme.deepAccent);button.setGravity(Gravity.CENTER);button.setContentDescription(description);button.setFocusable(true);
         GradientDrawable fill=new GradientDrawable();fill.setColor(theme.entrySurface);fill.setCornerRadius(dp(15));GradientDrawable mask=new GradientDrawable();mask.setColor(0xffffffff);mask.setCornerRadius(dp(15));

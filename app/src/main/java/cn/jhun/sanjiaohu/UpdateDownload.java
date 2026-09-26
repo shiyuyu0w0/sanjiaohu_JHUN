@@ -10,25 +10,31 @@ import java.util.UUID;
 
 final class UpdateDownload {
     static DownloadManager manager(Context c){return (DownloadManager)c.getSystemService(Context.DOWNLOAD_SERVICE);}
-    static synchronized void start(Context c,UpdateManifest m,boolean direct)throws Exception{
+    static synchronized void start(Context c,UpdateManifest m,int route)throws Exception{
         UpdateStore s=new UpdateStore(c);UpdateManifest latest=s.manifest();
         if(!s.available(c)||latest==null||!latest.canonical.equals(m.canonical))throw new IOException("请先检查有效的新版本");
-        cancel(c,"");s.prefs.edit().putString("task",m.json).putBoolean("direct",direct||m.mirror.isEmpty()).putBoolean("triedDirect",direct||m.mirror.isEmpty()).commit();
-        enqueue(c,s,m,direct||m.mirror.isEmpty());
+        if(!validRoute(m,route))throw new IOException("下载地址无效");
+        cancel(c,"");s.prefs.edit().putString("task",m.json).commit();
+        enqueue(c,s,m,route);
     }
-    private static void enqueue(Context c,UpdateStore s,UpdateManifest m,boolean direct)throws Exception{
-        String url=direct?m.url:m.mirror;if(!(direct?UpdatePolicy.apkUrl(url):UpdatePolicy.mirror(url,m.url)))throw new IOException("下载地址无效");
-        DownloadManager.Request request=new DownloadManager.Request(Uri.parse(url));request.setTitle("三角狐 "+m.name).setDescription(direct?"GitHub 官方线路":"加速线路");
+    private static boolean validRoute(UpdateManifest m,int route){
+        String url=UpdatePolicy.downloadUrl(m,route);
+        return url!=null&&(route==UpdatePolicy.GITEE?UpdatePolicy.gitee(url,m.name):route==UpdatePolicy.GHPROXY?UpdatePolicy.mirror(url,m.url):route==UpdatePolicy.GITHUB&&UpdatePolicy.apkUrl(url));
+    }
+    private static void enqueue(Context c,UpdateStore s,UpdateManifest m,int route)throws Exception{
+        if(!validRoute(m,route))throw new IOException("下载地址无效");
+        String url=UpdatePolicy.downloadUrl(m,route),label=UpdatePolicy.routeName(route);
+        DownloadManager.Request request=new DownloadManager.Request(Uri.parse(url));request.setTitle("三角狐 "+m.name).setDescription(label);
         // Only the verified private snapshot should offer installation in the app.
         request.setMimeType("application/vnd.android.package-archive");request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
         request.setAllowedOverMetered(true);request.setAllowedOverRoaming(false);
         request.setDestinationInExternalFilesDir(c,"updates",UUID.randomUUID()+".apk");
         long id=manager(c).enqueue(request);
-        if(!s.prefs.edit().putLong("downloadId",id).putLong("bytes",0).putBoolean("direct",direct).putBoolean("triedDirect",direct).putString("phase","downloading").putString("message",direct?"正在使用 GitHub 官方线路下载":"正在使用加速线路下载").remove("verifiedId").commit()){manager(c).remove(id);throw new IOException("无法保存下载任务");}
+        if(!s.prefs.edit().putLong("downloadId",id).putLong("bytes",0).putInt("route",route).remove("direct").remove("triedDirect").putString("phase","downloading").putString("message","正在使用 "+label+" 下载").remove("verifiedId").commit()){manager(c).remove(id);throw new IOException("无法保存下载任务");}
     }
     static synchronized void cancel(Context c,String message){
         UpdateStore s=new UpdateStore(c);long id=s.prefs.getLong("downloadId",-1),verified=s.prefs.getLong("verifiedId",-1);
-        s.prefs.edit().remove("downloadId").remove("verifiedId").remove("task").putString("phase","idle").putString("message",message).commit();
+        s.prefs.edit().remove("downloadId").remove("verifiedId").remove("task").remove("route").putString("phase","idle").putString("message",message).commit();
         if(id!=-1){try{manager(c).remove(id);}catch(Exception ignored){}UpdateVerifier.file(c,id).delete();}
         if(verified!=-1)UpdateVerifier.file(c,verified).delete();UpdateInstaller.abandon(c);
     }
@@ -63,8 +69,9 @@ final class UpdateDownload {
         UpdateManifest m=s.task();if(m==null)return;
         if(!online(c)){s.prefs.edit().putString("message","等待网络恢复后继续处理…").apply();return;}
         manager(c).remove(id);UpdateVerifier.file(c,id).delete();s.prefs.edit().remove("downloadId").commit();
-        if(UpdatePolicy.fallback(!s.prefs.getBoolean("direct",false),s.prefs.getBoolean("triedDirect",false),false,true)){
-            try{enqueue(c,s,m,true);s.prefs.edit().putString("message","加速线路暂不可用，正在尝试官方线路").apply();return;}catch(Exception ignored){}
+        int current=s.prefs.getInt("route",s.prefs.getBoolean("direct",false)?UpdatePolicy.GITHUB:UpdatePolicy.GHPROXY);
+        for(int next=UpdatePolicy.nextRoute(m,current);next!=-1;next=UpdatePolicy.nextRoute(m,next)){
+            try{enqueue(c,s,m,next);s.prefs.edit().putString("message",UpdatePolicy.routeName(current)+" 暂不可用，正在尝试 "+UpdatePolicy.routeName(next)).apply();return;}catch(Exception ignored){}
         }
         s.prefs.edit().putString("phase","error").putString("message",message+"，可重试、切换线路或打开发布页").commit();
     }

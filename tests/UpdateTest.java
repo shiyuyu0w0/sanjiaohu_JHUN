@@ -15,7 +15,7 @@ public final class UpdateTest {
         return new JSONObject().put("schemaVersion",1).put("manifestRevision",revision).put("enabled",true).put("channel","stable")
             .put("packageName",UpdatePolicy.PACKAGE).put("versionCode",code).put("versionName","1.1.2").put("minSdk",26)
             .put("releaseNotes",new JSONArray().put("测试更新")).put("releasePage",UpdatePolicy.REPO+"releases/tag/v1.1.2")
-            .put("apk",new JSONObject().put("url",url).put("sizeBytes",200).put("sha256",String.join("",Collections.nCopies(64,"a")))
+            .put("apk",new JSONObject().put("url",url).put("gitee",UpdatePolicy.giteeUrl("1.1.2")).put("sizeBytes",200).put("sha256",String.join("",Collections.nCopies(64,"a")))
                 .put("mirrors",new JSONArray().put(new JSONObject().put("id","ghproxy").put("name","加速线路").put("url",UpdatePolicy.PROXY+url))));
     }
     public static void main(String[] args)throws Exception{
@@ -39,9 +39,22 @@ public final class UpdateTest {
         String good=a.url;
         for(String bad:new String[]{good.replace("https:","http:"),good+"?redirect=evil",good+"#x",good.replace("github.com/","github.com.evil/"),good.replace("github.com/","github.com@evil/"),good.replace("shiyuyu0w0/","someone/"),good.replace("v1.1.2/","../"),good.replace("Sanjiaohu-","%53anjiaohu-"),good.replace("github.com","github.com:443")})check(!UpdatePolicy.apkUrl(bad),"reject URL: "+bad);
         check(UpdatePolicy.mirror(UpdatePolicy.PROXY+good,good),"exact nested repo allowed");check(!UpdatePolicy.mirror(UpdatePolicy.PROXY+good+"/../x",good),"mirror path cannot escape");
+        check(UpdatePolicy.gitee(a.gitee,a.name),"exact Gitee release URL accepted");
+        for(String bad:new String[]{a.gitee.replace("https:","http:"),a.gitee+"?redirect=evil",a.gitee+"#x",a.gitee.replace("gitee.com/","gitee.com.evil/"),a.gitee.replace("shiyuyu0w0/","someone/"),a.gitee.replace("v1.1.2/","v1.1.3/"),a.gitee.replace("gitee.com","gitee.com:443")}){
+            check(!UpdatePolicy.gitee(bad,a.name),"reject Gitee URL: "+bad);
+            JSONObject tampered=fixture(1,45);tampered.getJSONObject("apk").put("gitee",bad);
+            rejects(()->new UpdateManifest(tampered.toString()),"remote cannot redirect Gitee source");
+        }
+        check(UpdatePolicy.firstRoute(a)==UpdatePolicy.GITEE,"Gitee is preferred");
+        check(UpdatePolicy.nextRoute(a,UpdatePolicy.GITEE)==UpdatePolicy.GHPROXY,"Gitee falls back to GitHub proxy");
+        check(UpdatePolicy.nextRoute(a,UpdatePolicy.GHPROXY)==UpdatePolicy.GITHUB,"proxy falls back to GitHub official");
+        check(UpdatePolicy.nextRoute(a,UpdatePolicy.GITHUB)==-1,"automatic retries stop after official");
+        check(UpdatePolicy.nextChoice(a,UpdatePolicy.GITHUB)==UpdatePolicy.GITEE,"manual route choice wraps");
+        JSONObject legacyJson=fixture(1,45);legacyJson.getJSONObject("apk").remove("gitee");
+        UpdateManifest legacy=new UpdateManifest(legacyJson.toString());
+        check(legacy.gitee.isEmpty()&&UpdatePolicy.firstRoute(legacy)==UpdatePolicy.GHPROXY,"old manifest keeps existing route order");
         JSONObject malicious=fixture(1,45);malicious.getJSONObject("apk").getJSONArray("mirrors").getJSONObject(0).put("url","https://evil.test/x.apk");rejects(()->new UpdateManifest(malicious.toString()),"remote cannot introduce arbitrary mirror");
         long now=2*UpdatePolicy.DAY;check(UpdatePolicy.due(now,0,0),"first automatic check");check(!UpdatePolicy.due(now,now-1000,0),"24 hour success interval");check(!UpdatePolicy.due(now,0,now-1000),"failed checks back off");check(UpdatePolicy.due(now,now+1000,now+1000),"clock rollback recovers");
-        for(boolean proxy:new boolean[]{true,false})for(boolean tried:new boolean[]{true,false})for(boolean canceled:new boolean[]{true,false})for(boolean online:new boolean[]{true,false})check(UpdatePolicy.fallback(proxy,tried,canceled,online)==(proxy&&!tried&&!canceled&&online),"bounded retry policy");
         UpdateManifest actual=UpdateClient.check(null,(url,end)->{if(url.equals(UpdatePolicy.SOURCES[1])){Thread.sleep(80);return b.json;}return a.json;},1000);check(actual.revision==2,"wait for newer primary, not first old response");
         actual=UpdateClient.check(null,(url,end)->{if(!url.equals(UpdatePolicy.SOURCES[2]))throw new IOException("offline");return b.json;},1000);check(actual.revision==2,"proxy manifest fallback");
         rejects(()->UpdateClient.check(a,(url,end)->{throw new IOException("offline");},500),"all failures never latest");

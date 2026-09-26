@@ -1,6 +1,7 @@
 package cn.jhun.sanjiaohu;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Locale;
 
 /** The physics lab report service is reachable only from the campus network, so this browser
@@ -37,11 +38,19 @@ final class PhysicsLabPolicy {
         return false;
     }
     static boolean allowed(String value){return reportSite(value)||schoolHttps(value)||schoolCleartext(value);}
-    /** Null keeps the form's own accept types. Any bare extension (".docx") in that list would
-     *  match no MIME type and hide the report file, so the whole list widens to any file. */
-    static String pickerType(String[] accept){
-        if(accept==null||accept.length==0)return null;
-        for(String type:accept)if(type==null||type.indexOf('/')<=0)return "*/*";
-        return null;
+    static boolean uploadRequest(String value){return reportSite(value)&&"/Page/PEE/androidServer/UploadPic.aspx".equals(navigationUri(value).getPath());}
+    /** Invalid extension-only values widen the picker instead of hiding matching report files. */
+    static String[] pickerMimeTypes(String[] accept){
+        ArrayList<String> types=new ArrayList<>();
+        if(accept==null)return new String[0];
+        for(String value:accept){
+            if(value==null)return new String[0];
+            for(String part:value.split(",")){
+                String type=part.trim().toLowerCase(Locale.ROOT);
+                if(type.indexOf('/')<=0||type.contains(" "))return new String[0];
+                if(!types.contains(type))types.add(type);
+            }
+        }
+        return types.toArray(new String[0]);
     }
 }

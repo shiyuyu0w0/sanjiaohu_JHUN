@@ -1,5 +1,7 @@
 package cn.jhun.sanjiaohu;
 
+import java.util.Arrays;
+
 public final class PhysicsLabPolicyTest {
     static int checks;
     static void check(boolean result){checks++;if(!result)throw new AssertionError("check "+checks);}
@@ -35,16 +37,16 @@ public final class PhysicsLabPolicyTest {
         check(PhysicsLabPolicy.allowed(SITE+"?{a:b}"));
         check(SITE.equals(PhysicsLabPolicy.navigationUri(SITE+"?data={a:b}#/home").toString()));
         check(!PhysicsLabPolicy.allowed(SITE.replace("/Page","/{a:b}/Page")));
-        // File picker keeps the form's accept types only when they are real MIME types.
-        check(PhysicsLabPolicy.pickerType(null)==null);
-        check(PhysicsLabPolicy.pickerType(new String[0])==null);
-        check(PhysicsLabPolicy.pickerType(new String[]{"image/*"})==null);
-        check(PhysicsLabPolicy.pickerType(new String[]{"application/pdf","image/*"})==null);
-        check("*/*".equals(PhysicsLabPolicy.pickerType(new String[]{".docx",".pdf"})));
-        check("*/*".equals(PhysicsLabPolicy.pickerType(new String[]{"docx"})));
-        check("*/*".equals(PhysicsLabPolicy.pickerType(new String[]{""})));
-        check("*/*".equals(PhysicsLabPolicy.pickerType(new String[]{null})));
-        check("*/*".equals(PhysicsLabPolicy.pickerType(new String[]{"image/*",".docx"})));
+        String upload="http://wlxpk.jhun.edu.cn:6603/Page/PEE/androidServer/UploadPic.aspx";
+        check(PhysicsLabPolicy.uploadRequest(upload+"?userguid=example"));
+        check(!PhysicsLabPolicy.uploadRequest(upload.replace("wlxpk.jhun.edu.cn","other.invalid")));
+        check(!PhysicsLabPolicy.uploadRequest(upload.replace("UploadPic.aspx","CourseTableView.aspx")));
+        // WebView can supply one comma-separated value; malformed extensions must not narrow the picker.
+        check(PhysicsLabPolicy.pickerMimeTypes(null).length==0);
+        check(PhysicsLabPolicy.pickerMimeTypes(new String[]{"image/*"})[0].equals("image/*"));
+        check(Arrays.equals(PhysicsLabPolicy.pickerMimeTypes(new String[]{" image/JPEG,image/png ","image/jpeg"}),new String[]{"image/jpeg","image/png"}));
+        check(PhysicsLabPolicy.pickerMimeTypes(new String[]{"image/*",".docx"}).length==0);
+        check(PhysicsLabPolicy.pickerMimeTypes(new String[]{".docx,.pdf"}).length==0);
         System.out.println(checks+" 项大物实验报告入口检查通过");
     }
 }

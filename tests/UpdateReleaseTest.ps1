@@ -1,5 +1,5 @@
 param(
-    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.1.5.apk",
+    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.1.6.apk",
     [string]$Java = 'C:/Program Files/Android/Android Studio/jbr',
     [string]$Sdk = "$env:LOCALAPPDATA/Android/Sdk",
     [string]$BuildTools = '36.1.0'
@@ -32,4 +32,5 @@ Reject { $m = $raw | ConvertFrom-Json; $m.versionCode++; Assert-UpdateManifest $
 Reject { $m = $raw | ConvertFrom-Json; $m.packageName = 'invalid.package'; Assert-UpdateManifest $m $facts }
 Reject { $m = $raw | ConvertFrom-Json; $m.manifestRevision = '2'; Assert-UpdateManifest $m $facts }
 Reject { $m = $raw | ConvertFrom-Json; $m.apk.mirrors[0].url = 'https://example.com/wrong.apk'; Assert-UpdateManifest $m $facts }
+Reject { $m = $raw | ConvertFrom-Json; $m.apk.gitee = 'https://example.com/wrong.apk'; Assert-UpdateManifest $m $facts }
 Write-Output "Release script checks: $script:releaseChecks passed"

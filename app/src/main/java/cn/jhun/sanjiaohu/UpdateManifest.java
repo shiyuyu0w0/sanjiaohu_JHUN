@@ -7,7 +7,7 @@ final class UpdateManifest {
     final long revision,code,size;
     final int minSdk;
     final boolean enabled;
-    final String name,url,mirror,sha256,releasePage,notes,json,canonical;
+    final String name,url,gitee,mirror,sha256,releasePage,notes,json,canonical;
     UpdateManifest(String raw)throws Exception{
         if(raw==null||raw.length()>65536)throw new IllegalArgumentException("更新信息过大");
         checkNesting(raw);
@@ -20,6 +20,9 @@ final class UpdateManifest {
         if(!releasePage.equals(UpdatePolicy.REPO+"releases/tag/v"+name))throw new IllegalArgumentException("发布页地址无效");
         JSONObject apk=o.getJSONObject("apk");url=string(apk,"url",600);
         if(!UpdatePolicy.apkUrl(url)||!url.equals(UpdatePolicy.REPO+"releases/download/v"+name+"/Sanjiaohu-"+name+".apk"))throw new IllegalArgumentException("安装包地址无效");
+        Object giteeField=apk.opt("gitee");
+        gitee=giteeField==null?"":string(apk,"gitee",600);
+        if(!gitee.isEmpty()&&!UpdatePolicy.gitee(gitee,name))throw new IllegalArgumentException("Gitee 下载地址无效");
         size=number(apk,"sizeBytes",enabled?1:0,UpdatePolicy.MAX_APK);sha256=string(apk,"sha256",64).toLowerCase(Locale.ROOT);
         if(!sha256.matches("[a-f0-9]{64}")&&(enabled||!sha256.isEmpty()))throw new IllegalArgumentException("安装包校验值无效");
         JSONArray mirrors=apk.getJSONArray("mirrors");if(mirrors.length()>1)throw new IllegalArgumentException("不支持的下载线路");

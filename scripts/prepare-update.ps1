@@ -1,5 +1,5 @@
 param(
-    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.1.5.apk",
+    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.1.6.apk",
     [Parameter(Mandatory=$true)][long]$ManifestRevision,
     [Parameter(Mandatory=$true)][string]$NotesFile,
     [string]$Output = "$PSScriptRoot/../updates/stable/version.json",
@@ -19,11 +19,12 @@ if (Test-Path -LiteralPath $target) {
 }
 $notes = @(Get-Content -LiteralPath $NotesFile -Encoding UTF8 | Where-Object { $_.Trim().Length -gt 0 })
 $url = $script:UpdateRepo + 'releases/download/v' + $facts.VersionName + '/Sanjiaohu-' + $facts.VersionName + '.apk'
+$giteeUrl = $script:UpdateGiteeRepo + 'releases/download/v' + $facts.VersionName + '/Sanjiaohu-' + $facts.VersionName + '.apk'
 $manifest = [pscustomobject][ordered]@{
     schemaVersion=1; manifestRevision=$ManifestRevision; enabled=[bool]$Enable; channel='stable'; packageName='cn.jhun.sanjiaohu'
     versionCode=$facts.VersionCode; versionName=$facts.VersionName; minSdk=$facts.MinSdk; releaseNotes=$notes
     releasePage=($script:UpdateRepo + 'releases/tag/v' + $facts.VersionName)
-    apk=[pscustomobject][ordered]@{url=$url; sizeBytes=$facts.Size; sha256=$facts.Sha256; mirrors=@([pscustomobject]@{id='ghproxy'; name='Accelerated'; url=('https://ghproxy.net/' + $url)})}
+    apk=[pscustomobject][ordered]@{url=$url; gitee=$giteeUrl; sizeBytes=$facts.Size; sha256=$facts.Sha256; mirrors=@([pscustomobject]@{id='ghproxy'; name='Accelerated'; url=('https://ghproxy.net/' + $url)})}
 }
 Assert-UpdateManifest $manifest $facts
 # Enabling is the last step: both published routes must return these exact bytes.

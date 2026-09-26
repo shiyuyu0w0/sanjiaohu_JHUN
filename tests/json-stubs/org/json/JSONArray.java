@@ -21,6 +21,10 @@ public class JSONArray {
     public void add(Object value){list.add(value);}
     public int length(){return list.size();}
     public Object opt(int index){return index>=0&&index<list.size()?list.get(index):null;}
+    public Object get(int index)throws JSONException{
+        if(index<0||index>=list.size())throw new JSONException("out of range: "+index);
+        return list.get(index);
+    }
     public JSONObject optJSONObject(int index){
         Object v=opt(index);return v instanceof JSONObject?(JSONObject)v:null;
     }

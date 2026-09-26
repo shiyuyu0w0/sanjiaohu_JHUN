@@ -28,6 +28,7 @@ public final class LoginActivity extends Activity {
     String submittedAccount,submittedPassword;
     final java.util.concurrent.ExecutorService vault=java.util.concurrent.Executors.newSingleThreadExecutor();
     ThemePalette theme;
+    Dialog loginFailureDialog;
     Handler handler=new Handler(Looper.getMainLooper());
     String stateScript,submitScript;
     boolean loaded=false,attempting=false,submitted=false;
@@ -107,7 +108,14 @@ public final class LoginActivity extends Activity {
     }
     void inspectChallenge(){if(!loaded||!trusted(engine.getUrl()))return;engine.evaluateJavascript(stateScript,value->{if(isDestroyed())return;try{JSONObject state=new JSONObject(value);if(state.optString("state").equals("ready"))showChallenge(state);}catch(Exception ignored){}});}
     void showChallenge(JSONObject s){boolean required=s.optBoolean("captcha");challenge.setVisibility(required?View.VISIBLE:View.GONE);if(required){String image=s.optString("image");if(image.startsWith("data:image/png;base64,")){byte[] bytes=android.util.Base64.decode(image.substring(image.indexOf(',')+1),android.util.Base64.DEFAULT);captchaImage.setImageBitmap(BitmapFactory.decodeByteArray(bytes,0,bytes.length));}else{status.setText("验证码尚未加载，可点击图片区域刷新。");}}}
-    void error(String message){if(completing||isDestroyed())return;attempt++;attempting=false;submitted=false;submittedPassword=null;account.setEnabled(true);password.setEnabled(true);remember.setEnabled(true);submit.setEnabled(true);progress.setVisibility(View.GONE);status.setTextColor(theme.error);status.setText(message);}
+    void error(String message){
+        if(completing||isDestroyed())return;
+        boolean failedSubmission=submitted;
+        attempt++;attempting=false;submitted=false;submittedPassword=null;
+        account.setEnabled(true);password.setEnabled(true);remember.setEnabled(true);submit.setEnabled(true);
+        progress.setVisibility(View.GONE);status.setTextColor(theme.error);status.setText(message);
+        if(failedSubmission&&(loginFailureDialog==null||!loginFailureDialog.isShowing()))loginFailureDialog=LoginFailureWarning.show(this,theme);
+    }
     void complete(){
         if(completing||isFinishing())return;completing=true;attempt++;attempting=false;submit.setEnabled(false);
         final String user=submittedAccount,secret=submittedPassword;submittedPassword=null;password.setText("");
@@ -120,7 +128,7 @@ public final class LoginActivity extends Activity {
             handler.post(()->{if(isDestroyed())return;if(!stored)Toast.makeText(this,"登录成功，但加密凭证保存失败，下次需手动登录",Toast.LENGTH_LONG).show();CookieManager.getInstance().flush();setResult(RESULT_OK);finish();});
         });
     }
-    @Override protected void onDestroy(){attempt++;handler.removeCallbacksAndMessages(null);submittedPassword=null;vault.shutdown();password.setText("");engine.stopLoading();engine.destroy();super.onDestroy();}
+    @Override protected void onDestroy(){attempt++;handler.removeCallbacksAndMessages(null);submittedPassword=null;if(loginFailureDialog!=null)loginFailureDialog.dismiss();vault.shutdown();password.setText("");engine.stopLoading();engine.destroy();super.onDestroy();}
     LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(1);return v;}
     LinearLayout.LayoutParams fieldLayout(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(56));p.bottomMargin=dp(16);return p;}
     EditText input(String hint,boolean secret){EditText e=new EditText(this);e.setHint(hint);e.setTextColor(theme.text);e.setHintTextColor(theme.muted);e.setSingleLine(true);e.setTextSize(16);e.setPadding(dp(16),0,dp(16),0);e.setBackground(shape(theme.controlSurface));e.setInputType(InputType.TYPE_CLASS_TEXT|(secret?InputType.TYPE_TEXT_VARIATION_PASSWORD:InputType.TYPE_TEXT_VARIATION_NORMAL));e.setSaveEnabled(false);e.setAutofillHints(secret?View.AUTOFILL_HINT_PASSWORD:View.AUTOFILL_HINT_USERNAME);return e;}

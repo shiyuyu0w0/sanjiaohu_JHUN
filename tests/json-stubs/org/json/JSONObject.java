@@ -21,6 +21,19 @@ public class JSONObject {
         map.put(key,value);return this;
     }
     public Object opt(String key){return map.get(key);}
+    public Object get(String key)throws JSONException{
+        if(!map.containsKey(key))throw new JSONException("missing key: "+key);
+        return map.get(key);
+    }
+    public Object remove(String key){return map.remove(key);}
+    public JSONObject getJSONObject(String key)throws JSONException{
+        Object v=get(key);
+        if(!(v instanceof JSONObject))throw new JSONException("not an object: "+key);
+        return (JSONObject)v;
+    }
+    public Set<String> keySet(){return map.keySet();}
+    public Iterator<String> keys(){return map.keySet().iterator();}
+    public static String quote(String value){return '"'+value.replace("\\","\\\\").replace("\"","\\\"").replace("\n","\\n").replace("\r","\\r").replace("\t","\\t")+'"';}
     public String optString(String key){return optString(key,"");}
     public String optString(String key,String fallback){
         Object v=map.get(key);return v==null?fallback:String.valueOf(v);
@@ -54,7 +67,7 @@ public class JSONObject {
     }
     static String value(Object v){
         if(v==null)return "null";
-        if(v instanceof String)return '"'+((String)v).replace("\\","\\\\").replace("\"","\\\"")+'"';
+        if(v instanceof String)return quote((String)v);
         if(v instanceof JSONObject||v instanceof JSONArray)return v.toString();
         return String.valueOf(v);
     }

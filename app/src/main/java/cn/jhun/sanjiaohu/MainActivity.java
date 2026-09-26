@@ -51,6 +51,7 @@ public class MainActivity extends Activity {
     TextView stateText;
     TextView updateDot;
     Dialog activeSheet;
+    Dialog loginFailureDialog;
     final List<CourseCardView> visibleCards=new ArrayList<>();
     WebView web;
     Schedule schedule;
@@ -117,7 +118,7 @@ public class MainActivity extends Activity {
     @Override protected void onResume(){super.onResume();updateBadge();UpdateStore.check(getApplicationContext(),false,error->handler.post(()->{if(!isDestroyed())updateBadge();}));}
     void updateBadge(){if(updateDot!=null)updateDot.setVisibility(new UpdateStore(this).available(this)?View.VISIBLE:View.GONE);}
     @Override protected void onStop(){finishWeekTransition();super.onStop();if(pageAnimator!=null)pageAnimator.cancel();if(moreMenu!=null)moreMenu.dismiss();inBackground=true;verified=false;automaticCredentials=null;autoRunning=false;if(busy){generation++;busy=false;web.stopLoading();setState("本地课表 · 返回应用时重新同步");}CookieManager.getInstance().flush();}
-    @Override protected void onDestroy(){finishWeekTransition();if(pageAnimator!=null)pageAnimator.cancel();if(activeSheet!=null)activeSheet.dismiss();handler.removeCallbacksAndMessages(null);authIo.shutdown();web.destroy();super.onDestroy();}
+    @Override protected void onDestroy(){finishWeekTransition();if(pageAnimator!=null)pageAnimator.cancel();if(activeSheet!=null)activeSheet.dismiss();if(loginFailureDialog!=null)loginFailureDialog.dismiss();handler.removeCallbacksAndMessages(null);authIo.shutdown();web.destroy();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putBoolean("todayLabel",todayLabel);out.putFloat("wallpaperAspect",wallpaperAspect);}
     @Override public void onConfigurationChanged(android.content.res.Configuration c){super.onConfigurationChanged(c);render();if(activeSheet!=null)activeSheet.getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels,dp(560)),-1);}
     String read(InputStream in)throws IOException {try(InputStream input=in; ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=input.read(b))!=-1)out.write(b,0,n);return out.toString("UTF-8");}}
@@ -194,12 +195,13 @@ public class MainActivity extends Activity {
         }
     }
     boolean canAutoLogin(){return prefs.getBoolean("autoLogin",true)&&!prefs.getBoolean("autoBlocked",false)&&CredentialStore.exists(this);}
-    void authAttention(String message){verified=false;automaticCredentials=null;autoRunning=false;prefs.edit().putBoolean("loginCompleted",false).putBoolean("autoBlocked",true).apply();fail(message);}
+    void authAttention(String message){boolean failedSubmission=autoRunning&&autoSubmitted;verified=false;automaticCredentials=null;autoRunning=false;autoSubmitted=false;prefs.edit().putBoolean("loginCompleted",false).putBoolean("autoBlocked",true).apply();fail(message);if(failedSubmission)showLoginFailureWarning();}
+    void showLoginFailureWarning(){if(loginFailureDialog==null||!loginFailureDialog.isShowing())loginFailureDialog=LoginFailureWarning.show(this,palette);}
     void authenticated(){verified=true;prefs.edit().putBoolean("loginCompleted",true).putBoolean("autoBlocked",false).putLong("lastAuthAt",System.currentTimeMillis()).apply();}
     void tryAutoLogin(int token){
         verified=false;
         if(autoTried||!canAutoLogin()){authAttention("登录已过期 · 请到个人页登录，课表仍保留");return;}
-        autoTried=true;autoRunning=true;setState("会话已过期 · 正在自动登录…");
+        autoTried=true;autoRunning=true;autoSubmitted=false;setState("会话已过期 · 正在自动登录…");
         authIo.execute(()->{try{CredentialStore.Credentials credentials=CredentialStore.load(this);handler.post(()->{
             if(isDestroyed()||inBackground||token!=generation||!busy)return;
             automaticCredentials=credentials;autoSubmitted=false;mainLoaded=false;deadline=SystemClock.elapsedRealtime()+30000;
@@ -208,7 +210,7 @@ public class MainActivity extends Activity {
     }
     void pollLogin(int token){
         if(token!=generation||!busy||inBackground)return;
-        if(SystemClock.elapsedRealtime()>deadline){automaticCredentials=null;autoRunning=false;fail("自动登录超时 · 已保留本地课表");return;}
+        if(SystemClock.elapsedRealtime()>deadline){boolean failedSubmission=autoSubmitted;automaticCredentials=null;autoRunning=false;autoSubmitted=false;fail("自动登录超时 · 已保留本地课表");if(failedSubmission)showLoginFailureWarning();return;}
         if(!mainLoaded||!sourceOrigin(web.getUrl())){handler.postDelayed(()->pollLogin(token),600);return;}
         web.evaluateJavascript(loginStateScript,result->{
             if(token!=generation||!busy||inBackground)return;

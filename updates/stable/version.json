@@ -1,26 +1,29 @@
 {
   "schemaVersion": 1,
-  "manifestRevision": 8,
+  "manifestRevision": 10,
   "enabled": true,
   "channel": "stable",
   "packageName": "cn.jhun.sanjiaohu",
-  "versionCode": 48,
-  "versionName": "1.1.5",
+  "versionCode": 49,
+  "versionName": "1.1.6",
   "minSdk": 26,
   "releaseNotes": [
-    "修复北区18舍、南区9舍空调电表无法识别的问题。",
-    "支持南区10–12舍按单元选房，显示学校未标类型的宿舍电表。"
+    "更新下载优先使用 Gitee，保留 GitHub 加速与官方备用线路。",
+    "教务登录失败时提醒密码错误五次可能导致账号锁定 24 小时。",
+    "修复实验报告选图返回、图片文件名和预览刷新异常。",
+    "完善实验报告多图选择、四张图片限制和上传失败提示。"
   ],
-  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.1.5",
+  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.1.6",
   "apk": {
-    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.5/Sanjiaohu-1.1.5.apk",
-    "sizeBytes": 2545608,
-    "sha256": "d05f97311c623a873427e5dd4b320d958796b0b50c3b44afbd90822fceb7c004",
+    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.6/Sanjiaohu-1.1.6.apk",
+    "gitee": "https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.6/Sanjiaohu-1.1.6.apk",
+    "sizeBytes": 2553876,
+    "sha256": "de163c88e7daa78bd6f5e63630d1e8d18481dabf99db1c801a23be052fe249f6",
     "mirrors": [
       {
         "id": "ghproxy",
         "name": "Accelerated",
-        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.5/Sanjiaohu-1.1.5.apk"
+        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.6/Sanjiaohu-1.1.6.apk"
       }
     ]
   }

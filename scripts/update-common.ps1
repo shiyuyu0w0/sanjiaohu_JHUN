@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $script:UpdateRoot = Split-Path $PSScriptRoot -Parent
 $script:UpdateRepo = 'https://github.com/shiyuyu0w0/sanjiaohu_JHUN/'
+$script:UpdateGiteeRepo = 'https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/'
 $script:UpdateCertificate = '2D5C4C7AB3F5E829DFB2273F333A2AF987E512DC270FBE03347638329CDEF22A'
 
 function Invoke-UpdateTool([string]$Executable, [string[]]$Arguments) {
@@ -38,7 +39,9 @@ function Assert-UpdateManifest($Manifest, $Apk) {
     if ($Manifest.versionCode -ne $Apk.VersionCode -or $Manifest.versionName -cne $Apk.VersionName -or $Manifest.minSdk -ne $Apk.MinSdk) { throw 'Manifest version does not match APK.' }
     if ($Manifest.apk.sizeBytes -ne $Apk.Size -or $Manifest.apk.sha256 -cne $Apk.Sha256) { throw 'Manifest size/hash does not match final signed APK.' }
     $official = $script:UpdateRepo + 'releases/download/v' + $Apk.VersionName + '/Sanjiaohu-' + $Apk.VersionName + '.apk'
+    $gitee = $script:UpdateGiteeRepo + 'releases/download/v' + $Apk.VersionName + '/Sanjiaohu-' + $Apk.VersionName + '.apk'
     if ($Manifest.apk.url -cne $official -or $Manifest.releasePage -cne ($script:UpdateRepo + 'releases/tag/v' + $Apk.VersionName)) { throw 'Unexpected release URL.' }
+    if ($Manifest.apk.gitee -cne $gitee) { throw 'Unexpected Gitee release URL.' }
     if (@($Manifest.apk.mirrors).Count -ne 1 -or $Manifest.apk.mirrors[0].id -cne 'ghproxy' -or $Manifest.apk.mirrors[0].url -cne ('https://ghproxy.net/' + $official)) { throw 'Unexpected mirror URL.' }
     if ($Manifest.releaseNotes -isnot [array] -or $Manifest.releaseNotes.Count -gt 30) { throw 'Invalid release notes.' }
     foreach ($line in $Manifest.releaseNotes) { if ($line -isnot [string] -or $line.Length -gt 500) { throw 'Invalid release note.' } }
@@ -54,7 +57,7 @@ function Test-UpdateLinks($Manifest) {
     $directory = Join-Path $script:UpdateRoot 'build/update-link-checks'
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
     try {
-        foreach ($initial in @($Manifest.apk.url, $Manifest.apk.mirrors[0].url)) {
+        foreach ($initial in @($Manifest.apk.gitee, $Manifest.apk.mirrors[0].url, $Manifest.apk.url)) {
             $url = [uri]$initial
             $file = Join-Path $directory ([guid]::NewGuid().ToString() + '.apk')
             $token = New-Object System.Threading.CancellationTokenSource
@@ -63,7 +66,7 @@ function Test-UpdateLinks($Manifest) {
                 $complete = $false
                 for ($redirect = 0; $redirect -lt 6; $redirect++) {
                     $hostName = $url.DnsSafeHost
-                    if ($url.Scheme -cne 'https' -or !$url.IsDefaultPort -or $url.UserInfo -or ($hostName -notin @('github.com','ghproxy.net','githubusercontent.com') -and !$hostName.EndsWith('.githubusercontent.com'))) { throw 'Unexpected download redirect host/protocol.' }
+                    if ($url.Scheme -cne 'https' -or !$url.IsDefaultPort -or $url.UserInfo -or ($hostName -notin @('github.com','ghproxy.net','githubusercontent.com','gitee.com','foruda.gitee.com') -and !$hostName.EndsWith('.githubusercontent.com'))) { throw 'Unexpected download redirect host/protocol.' }
                     $response = $client.GetAsync($url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead, $token.Token).GetAwaiter().GetResult()
                     try {
                         $status = [int]$response.StatusCode

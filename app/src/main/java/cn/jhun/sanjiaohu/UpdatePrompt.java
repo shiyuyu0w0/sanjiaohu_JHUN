@@ -26,7 +26,8 @@ final class UpdatePrompt {
     LinearLayout details,actions;
     TextView status;
     ProgressBar progress;
-    boolean direct,checking,working,polling,permissionPending,restorePrompt,resumeCheck,showResult,destroyed;
+    int route=UpdatePolicy.GITEE;
+    boolean checking,working,polling,permissionPending,restorePrompt,resumeCheck,showResult,destroyed;
     String rendered="",error="";
     final Runnable tick=new Runnable(){public void run(){
         if(destroyed||visible.get()!=UpdatePrompt.this)return;
@@ -40,7 +41,7 @@ final class UpdatePrompt {
 
     UpdatePrompt(Activity host,ThemePalette theme,TextView entry,Bundle saved){
         this.host=host;this.theme=theme;this.entry=entry;store=new UpdateStore(host);
-        if(saved!=null){direct=saved.getBoolean("updateDirect");permissionPending=saved.getBoolean("updatePermission");restorePrompt=saved.getBoolean("updatePrompt");resumeCheck=saved.getBoolean("updateChecking");}
+        if(saved!=null){route=saved.containsKey("updateRoute")?saved.getInt("updateRoute"):saved.getBoolean("updateDirect")?UpdatePolicy.GITHUB:UpdatePolicy.GHPROXY;permissionPending=saved.getBoolean("updatePermission");restorePrompt=saved.getBoolean("updatePrompt");resumeCheck=saved.getBoolean("updateChecking");}
     }
     void resume(){
         visible=new WeakReference<>(this);handler.post(tick);
@@ -51,7 +52,7 @@ final class UpdatePrompt {
     }
     void pause(){handler.removeCallbacks(tick);if(visible.get()==this)visible.clear();}
     void destroy(){destroyed=true;pause();handler.removeCallbacksAndMessages(null);if(dialog!=null)dialog.dismiss();}
-    void save(Bundle state){state.putBoolean("updateDirect",direct);state.putBoolean("updatePermission",permissionPending);state.putBoolean("updatePrompt",dialog!=null&&dialog.isShowing());state.putBoolean("updateChecking",checking);}
+    void save(Bundle state){state.putInt("updateRoute",route);state.putBoolean("updatePermission",permissionPending);state.putBoolean("updatePrompt",dialog!=null&&dialog.isShowing());state.putBoolean("updateChecking",checking);}
 
     void check(){
         if(checking||working)return;
@@ -87,8 +88,11 @@ final class UpdatePrompt {
     }
     void download(){
         UpdateManifest m=store.manifest();if(m==null)return;
-        work(()->{try{UpdateDownload.start(host.getApplicationContext(),m,direct);}catch(Exception e){host.runOnUiThread(()->fail(e,"暂时无法下载，请重试"));}});
+        if(UpdatePolicy.downloadUrl(m,route)==null)route=UpdatePolicy.firstRoute(m);
+        int selected=route;
+        work(()->{try{UpdateDownload.start(host.getApplicationContext(),m,selected);}catch(Exception e){host.runOnUiThread(()->fail(e,"暂时无法下载，请重试"));}});
     }
+    int activeRoute(){return store.prefs.getInt("route",store.prefs.getBoolean("direct",false)?UpdatePolicy.GITHUB:UpdatePolicy.GHPROXY);}
     void install(){
         if(!host.getPackageManager().canRequestPackageInstalls()){
             permissionPending=true;
@@ -115,22 +119,30 @@ final class UpdatePrompt {
         UpdateManifest m=store.manifest(),task=store.task();String phase=store.prefs.getString("phase","idle");
         boolean active=phase.equals("downloading")||phase.equals("verifying");long bytes=store.prefs.getLong("bytes",0);
         progress.setVisibility(active?View.VISIBLE:View.GONE);progress.setIndeterminate(phase.equals("verifying"));progress.setProgress(task==null||task.size==0?0:(int)Math.min(100,100*bytes/task.size));
-        status.setText(!error.isEmpty()?error:checking?"正在检查更新…":store.prefs.getString("message","")+(active&&task!=null?"\n"+(store.prefs.getBoolean("direct",false)?"GitHub 官方":"加速线路")+" · "+String.format(Locale.CHINA,"%.1f / %.1f MB",bytes/1048576.0,task.size/1048576.0):""));
+        status.setText(!error.isEmpty()?error:checking?"正在检查更新…":store.prefs.getString("message","")+(active&&task!=null?"\n"+UpdatePolicy.routeName(activeRoute())+" · "+String.format(Locale.CHINA,"%.1f / %.1f MB",bytes/1048576.0,task.size/1048576.0):""));
         status.setTextColor(error.isEmpty()?theme.muted:theme.error);
-        String signature=(m==null?"":m.canonical)+phase+working+checking+error+store.available(host);
+        String signature=(m==null?"":m.canonical)+phase+working+checking+error+route+activeRoute()+store.available(host);
         if(signature.equals(rendered))return;rendered=signature;details.removeAllViews();actions.removeAllViews();
         if(m!=null&&store.available(host)){
             details.addView(text("发现新版本 "+m.name,22,true));
             TextView notes=text(m.notes,15,false);notes.setPadding(0,dp(14),0,dp(10));notes.setLineSpacing(dp(4),1);details.addView(notes);
             details.addView(text(String.format(Locale.CHINA,"安装包 %.2f MB",m.size/1048576.0),13,false));
             if(!active&&!phase.equals("ready")&&!phase.equals("installing")&&!phase.equals("confirm")){
-                RadioGroup routes=new RadioGroup(host);RadioButton fast=new RadioButton(host),official=new RadioButton(host);
-                fast.setId(View.generateViewId());official.setId(View.generateViewId());fast.setText("加速线路");official.setText("GitHub 官方");
-                for(RadioButton b:new RadioButton[]{fast,official}){b.setTextColor(theme.text);b.setButtonTintList(ColorStateList.valueOf(theme.deepAccent));routes.addView(b);}
-                fast.setEnabled(!m.mirror.isEmpty());if(m.mirror.isEmpty())direct=true;routes.check(direct?official.getId():fast.getId());routes.setOnCheckedChangeListener((g,id)->direct=id==official.getId());details.addView(routes);addButton("下载更新",this::download);
+                RadioGroup routes=new RadioGroup(host);RadioButton gitee=new RadioButton(host),fast=new RadioButton(host),official=new RadioButton(host);
+                gitee.setId(View.generateViewId());fast.setId(View.generateViewId());official.setId(View.generateViewId());
+                gitee.setText("Gitee（优先）");fast.setText("GitHub 加速");official.setText("GitHub 官方");
+                for(RadioButton b:new RadioButton[]{gitee,fast,official}){b.setTextColor(theme.text);b.setButtonTintList(ColorStateList.valueOf(theme.deepAccent));routes.addView(b);}
+                gitee.setEnabled(!m.gitee.isEmpty());fast.setEnabled(!m.mirror.isEmpty());
+                if(UpdatePolicy.downloadUrl(m,route)==null)route=UpdatePolicy.firstRoute(m);
+                routes.check(route==UpdatePolicy.GITEE?gitee.getId():route==UpdatePolicy.GHPROXY?fast.getId():official.getId());
+                routes.setOnCheckedChangeListener((g,id)->route=id==gitee.getId()?UpdatePolicy.GITEE:id==fast.getId()?UpdatePolicy.GHPROXY:UpdatePolicy.GITHUB);
+                details.addView(routes);addButton("下载更新",this::download);
             }
         }else details.addView(text(store.prefs.getBoolean("blocked",false)?"更新信息异常":"暂无可用更新",20,true));
-        if(active){addButton("取消下载",this::cancel);if(m!=null&&!m.mirror.isEmpty())addButton("切换到"+(store.prefs.getBoolean("direct",false)?"加速线路":"GitHub 官方"),()->{direct=!store.prefs.getBoolean("direct",false);download();});}
+        if(active){
+            addButton("取消下载",this::cancel);
+            if(m!=null){int next=UpdatePolicy.nextChoice(m,activeRoute());if(next!=activeRoute())addButton("切换到 "+UpdatePolicy.routeName(next),()->{route=next;download();});}
+        }
         if(task!=null&&(phase.equals("ready")||phase.equals("installing")||phase.equals("confirm"))){addButton(phase.equals("ready")?"立即安装":"继续安装",phase.equals("confirm")?this::continueConfirmation:this::install);addButton("取消更新",this::cancel);}
         if(m!=null&&phase.equals("error"))addButton("打开发布页",()->{try{host.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(m.releasePage)));}catch(Exception e){notifyUser("没有可打开发布页的浏览器");}});
         addButton("稍后",()->dialog.dismiss());
