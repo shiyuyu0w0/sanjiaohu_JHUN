@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
-  "manifestRevision": 10,
+  "manifestRevision": 11,
   "enabled": true,
   "channel": "stable",
   "packageName": "cn.jhun.sanjiaohu",
-  "versionCode": 49,
-  "versionName": "1.1.6",
+  "versionCode": 50,
+  "versionName": "1.1.7",
   "minSdk": 26,
   "releaseNotes": [
-    "更新下载优先使用 Gitee，保留 GitHub 加速与官方备用线路。",
-    "教务登录失败时提醒密码错误五次可能导致账号锁定 24 小时。",
-    "修复实验报告选图返回、图片文件名和预览刷新异常。",
-    "完善实验报告多图选择、四张图片限制和上传失败提示。"
+    "新增教务系统扫码登录，可选择将有效会话加密保存在本机。",
+    "扫码会话失效时给出提醒，并建议使用密码登录。",
+    "电费页新增历史缴费订单，可查看金额、房间、时间和处理进度。",
+    "统一重绘应用内图标，优化刷新、导航、菜单与深色模式下的显示。"
   ],
-  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.1.6",
+  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.1.7",
   "apk": {
-    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.6/Sanjiaohu-1.1.6.apk",
-    "gitee": "https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.6/Sanjiaohu-1.1.6.apk",
-    "sizeBytes": 2553876,
-    "sha256": "de163c88e7daa78bd6f5e63630d1e8d18481dabf99db1c801a23be052fe249f6",
+    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.7/Sanjiaohu-1.1.7.apk",
+    "gitee": "https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.7/Sanjiaohu-1.1.7.apk",
+    "sizeBytes": 2584771,
+    "sha256": "5329ba27cb80e6a9eec9114d6b4d3d4905a8a4609352a1805e9c409697bf9da8",
     "mirrors": [
       {
         "id": "ghproxy",
         "name": "Accelerated",
-        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.6/Sanjiaohu-1.1.6.apk"
+        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.7/Sanjiaohu-1.1.7.apk"
       }
     ]
   }

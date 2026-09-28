@@ -18,6 +18,7 @@ import java.io.InputStream;
 public final class AboutActivity extends Activity {
     /** Main changes in each released version, newest first. */
     static final String[][] UPDATES={
+        {"v1.1.7","- 新增教务系统扫码登录，可选择将有效会话加密保存在本机。\n- 扫码会话失效时给出提醒，并建议使用密码登录。\n- 电费页新增历史缴费订单，可查看金额、房间、时间和处理进度。\n- 统一重绘应用内图标，优化刷新、导航、菜单与深色模式下的显示。"},
         {"v1.1.6","- 更新下载优先使用 Gitee，保留 GitHub 加速与官方备用线路。\n- 教务登录失败时提醒密码错误五次可能导致账号锁定 24 小时。\n- 修复实验报告选图返回、图片文件名和预览刷新异常。\n- 完善实验报告多图选择、四张图片限制和上传失败提示。"},
         {"v1.1.5","- 修复北区18舍、南区9舍空调电表无法识别的问题。\n- 支持南区10–12舍按单元选房，显示学校未标类型的宿舍电表。"},
         {"v1.1.4","- 未校准周次时显示全部课程，同一时段并排展示。\n- 校准周次时需手动选择第一教学周。\n- 修复实验报告选择相册图片后无法上传的问题。\n- 重新绘制刷新图标。"},
@@ -68,7 +69,7 @@ public final class AboutActivity extends Activity {
     LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
     LinearLayout card(){LinearLayout v=column();v.setPadding(dp(20),dp(20),dp(20),dp(20));v.setBackground(shape(theme.entrySurface,24));return v;}
     void gap(LinearLayout parent,int size){parent.addView(new View(this),new LinearLayout.LayoutParams(1,dp(size)));}
-    TextView text(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(Typeface.create("sans-serif-medium",0));return t;}
+    TextView text(String value,int size,int color,boolean bold){TextView t=new AppIcons.Label(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(Typeface.create("sans-serif-medium",0));return t;}
     GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
     int dp(float value){return (int)(getResources().getDisplayMetrics().density*value+.5f);}
 }

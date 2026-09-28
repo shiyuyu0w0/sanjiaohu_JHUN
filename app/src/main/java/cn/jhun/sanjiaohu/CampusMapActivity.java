@@ -127,6 +127,6 @@ public final class CampusMapActivity extends Activity {
         GradientDrawable fill=new GradientDrawable();fill.setColor(theme.entrySurface);fill.setCornerRadius(dp(15));GradientDrawable mask=new GradientDrawable();mask.setColor(0xffffffff);mask.setCornerRadius(dp(15));
         button.setBackground(new RippleDrawable(ColorStateList.valueOf((theme.primary&0xffffff)|0x33000000),fill,mask));button.setOnClickListener(v->run.run());return button;
     }
-    TextView text(String value,int size,int color){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);return t;}
+    TextView text(String value,int size,int color){TextView t=new AppIcons.Label(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);return t;}
     int dp(float value){return (int)(getResources().getDisplayMetrics().density*value+.5f);}
 }

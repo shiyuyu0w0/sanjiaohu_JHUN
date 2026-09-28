@@ -192,7 +192,7 @@ public final class PhysicsLabActivity extends Activity {
         GradientDrawable fill=shape(filled?theme.primary:theme.entrySurface,15);if(!filled)fill.setStroke(dp(1),theme.outline);GradientDrawable mask=shape(theme.rippleMask,15);
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(((filled?theme.onPrimary:theme.primary)&0xffffff)|0x22000000),fill,mask));button.setOnClickListener(v->run.run());return button;
     }
-    TextView text(String value,int size,int color){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);return t;}
+    TextView text(String value,int size,int color){TextView t=new AppIcons.Label(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);return t;}
     GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
     int dp(float value){return (int)(getResources().getDisplayMetrics().density*value+.5f);}
 }

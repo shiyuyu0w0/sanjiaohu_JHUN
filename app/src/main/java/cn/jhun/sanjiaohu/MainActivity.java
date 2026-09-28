@@ -32,6 +32,8 @@ public class MainActivity extends Activity {
     CustomCourseStore customStore;
     List<Course> localCourses=new ArrayList<>();
     boolean customReadError=false,todayLabel=false,verified=false,autoTried=false,autoSubmitted=false,autoRunning=false,credentialBusy=false;
+    boolean teachingSessionReady=false,teachingSessionRestoring=false;
+    int teachingSessionGeneration=0;
     int page=0;
     long submittedAt;
     String loginStateScript,loginSubmitScript;
@@ -52,6 +54,7 @@ public class MainActivity extends Activity {
     TextView updateDot;
     Dialog activeSheet;
     Dialog loginFailureDialog;
+    Dialog qrSessionExpiredDialog;
     final List<CourseCardView> visibleCards=new ArrayList<>();
     WebView web;
     Schedule schedule;
@@ -118,7 +121,7 @@ public class MainActivity extends Activity {
     @Override protected void onResume(){super.onResume();updateBadge();UpdateStore.check(getApplicationContext(),false,error->handler.post(()->{if(!isDestroyed())updateBadge();}));}
     void updateBadge(){if(updateDot!=null)updateDot.setVisibility(new UpdateStore(this).available(this)?View.VISIBLE:View.GONE);}
     @Override protected void onStop(){finishWeekTransition();super.onStop();if(pageAnimator!=null)pageAnimator.cancel();if(moreMenu!=null)moreMenu.dismiss();inBackground=true;verified=false;automaticCredentials=null;autoRunning=false;if(busy){generation++;busy=false;web.stopLoading();setState("本地课表 · 返回应用时重新同步");}CookieManager.getInstance().flush();}
-    @Override protected void onDestroy(){finishWeekTransition();if(pageAnimator!=null)pageAnimator.cancel();if(activeSheet!=null)activeSheet.dismiss();if(loginFailureDialog!=null)loginFailureDialog.dismiss();handler.removeCallbacksAndMessages(null);authIo.shutdown();web.destroy();super.onDestroy();}
+    @Override protected void onDestroy(){finishWeekTransition();if(pageAnimator!=null)pageAnimator.cancel();if(activeSheet!=null)activeSheet.dismiss();if(loginFailureDialog!=null)loginFailureDialog.dismiss();if(qrSessionExpiredDialog!=null)qrSessionExpiredDialog.dismiss();handler.removeCallbacksAndMessages(null);authIo.shutdown();web.destroy();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putBoolean("todayLabel",todayLabel);out.putFloat("wallpaperAspect",wallpaperAspect);}
     @Override public void onConfigurationChanged(android.content.res.Configuration c){super.onConfigurationChanged(c);render();if(activeSheet!=null)activeSheet.getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels,dp(560)),-1);}
     String read(InputStream in)throws IOException {try(InputStream input=in; ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=input.read(b))!=-1)out.write(b,0,n);return out.toString("UTF-8");}}
@@ -153,9 +156,21 @@ public class MainActivity extends Activity {
     void attachHidden(){if(web.getParent()!=null)((android.view.ViewGroup)web.getParent()).removeView(web);web.setAlpha(0);web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);web.setFocusable(false);root.addView(web,0,new FrameLayout.LayoutParams(1,1));}
     void sync(){
         if(busy||credentialBusy)return;
+        if(!teachingSessionReady){restoreTeachingSession();return;}
         jobKind=page==4?"exams":page==3?(gradeSummarySheet!=null&&gradeSummarySheet.dialog.isShowing()&&summaryAll?"summary":"grades"):"schedule";jobTerm=jobKind.equals("exams")?examTerm:jobKind.equals("summary")?"入学以来":page==3?gradeTerm:selectedTerm;
         if(!prefs.getBoolean("loginCompleted",false)&&!canAutoLogin()){showLogin();return;}
         autoTried=false;autoRunning=false;loadError=false;mainLoaded=false;startPoll();web.loadUrl(HOME);
+    }
+    boolean qrLogin(){return prefs.getString("teachingLoginMethod","password").equals("qr");}
+    void restoreTeachingSession(){
+        if(teachingSessionRestoring)return;
+        if(!qrLogin()||!prefs.getBoolean("autoLogin",false)||!prefs.getBoolean("loginCompleted",false)||!TeachingSessionStore.exists(this)){teachingSessionReady=true;sync();return;}
+        teachingSessionRestoring=true;int id=++teachingSessionGeneration;setState("正在恢复本机扫码会话…");
+        authIo.execute(()->{String savedSession=null;try{savedSession=TeachingSessionStore.load(this);}catch(Exception e){TeachingSessionStore.clear(this);}final String snapshot=savedSession;
+            handler.post(()->{if(isDestroyed()||id!=teachingSessionGeneration)return;
+                TeachingSessionStore.restore(snapshot,ok->{if(isDestroyed()||id!=teachingSessionGeneration)return;teachingSessionRestoring=false;teachingSessionReady=true;CookieManager.getInstance().flush();if(!inBackground)sync();});
+            });
+        });
     }
     void cancelSync(){
         if(busy){if(jobKind.equals("exams"))examState=exams==null?"尚无本地考试安排":"本地考试安排 · "+stamp(exams.savedAt);else if(jobKind.equals("summary"))summaryState=summaryGrades==null?"尚无本地汇总":"本地汇总 · "+stamp(summaryGrades.savedAt);else if(jobKind.equals("grades"))gradeState=grades==null?"尚无该学期的本地成绩":"本地成绩 · "+stamp(grades.savedAt);else state=schedule==null?"尚无该学期的本地课表":"本地课表 · "+stamp(schedule.savedAt);}
@@ -194,13 +209,16 @@ public class MainActivity extends Activity {
             render();setState("正在获取"+(jobKind.equals("exams")?"考试安排":jobKind.equals("summary")?"汇总":jobKind.equals("grades")?"成绩":"课表")+"…");
         }
     }
-    boolean canAutoLogin(){return prefs.getBoolean("autoLogin",true)&&!prefs.getBoolean("autoBlocked",false)&&CredentialStore.exists(this);}
-    void authAttention(String message){boolean failedSubmission=autoRunning&&autoSubmitted;verified=false;automaticCredentials=null;autoRunning=false;autoSubmitted=false;prefs.edit().putBoolean("loginCompleted",false).putBoolean("autoBlocked",true).apply();fail(message);if(failedSubmission)showLoginFailureWarning();}
+    boolean canAutoLogin(){return !qrLogin()&&prefs.getBoolean("autoLogin",true)&&!prefs.getBoolean("autoBlocked",false)&&CredentialStore.exists(this);}
+    void authAttention(String message){boolean failedSubmission=autoRunning&&autoSubmitted;verified=false;automaticCredentials=null;autoRunning=false;autoSubmitted=false;prefs.edit().putBoolean("loginCompleted",false).putBoolean("autoBlocked",true).apply();authIo.execute(()->TeachingSessionStore.clear(this));fail(message);if(failedSubmission)showLoginFailureWarning();}
     void showLoginFailureWarning(){if(loginFailureDialog==null||!loginFailureDialog.isShowing())loginFailureDialog=LoginFailureWarning.show(this,palette);}
-    void authenticated(){verified=true;prefs.edit().putBoolean("loginCompleted",true).putBoolean("autoBlocked",false).putLong("lastAuthAt",System.currentTimeMillis()).apply();}
+    void showQrSessionExpiredWarning(){if(!inBackground&&(qrSessionExpiredDialog==null||!qrSessionExpiredDialog.isShowing()))qrSessionExpiredDialog=QrSessionExpiredWarning.show(this,palette,()->showLogin());}
+    void authenticated(){verified=true;prefs.edit().putBoolean("loginCompleted",true).putBoolean("autoBlocked",false).putLong("lastAuthAt",System.currentTimeMillis()).apply();
+        if(qrLogin()&&prefs.getBoolean("autoLogin",false)){String snapshot=TeachingSessionStore.capture();if(snapshot!=null)authIo.execute(()->{try{TeachingSessionStore.save(this,snapshot);}catch(Exception ignored){}});}
+    }
     void tryAutoLogin(int token){
         verified=false;
-        if(autoTried||!canAutoLogin()){authAttention("登录已过期 · 请到个人页登录，课表仍保留");return;}
+        if(autoTried||!canAutoLogin()){boolean scanned=qrLogin();authAttention(scanned?"扫码会话已过期 · 建议使用密码登录，本地记录仍保留":"登录已过期 · 请到个人页登录，课表仍保留");if(scanned)showQrSessionExpiredWarning();return;}
         autoTried=true;autoRunning=true;autoSubmitted=false;setState("会话已过期 · 正在自动登录…");
         authIo.execute(()->{try{CredentialStore.Credentials credentials=CredentialStore.load(this);handler.post(()->{
             if(isDestroyed()||inBackground||token!=generation||!busy)return;
@@ -274,7 +292,7 @@ public class MainActivity extends Activity {
     }
     void setState(String s){if(jobKind.equals("exams"))examState=s.replace("本地课表","本地考试安排");else if(jobKind.equals("summary"))summaryState=s.replace("本地课表","本地汇总");else if(jobKind.equals("grades"))gradeState=s.replace("本地课表","本地成绩");else state=s;if(stateText!=null)stateText.setText(page==4?examState:page==3?gradeState:state);if(authStatusText!=null)authStatusText.setText(authStatus());refreshSummary();}
     void fail(String reason){automaticCredentials=null;autoRunning=false;busy=false;generation++;if(jobKind.equals("exams")?exams==null:jobKind.equals("summary")?summaryGrades==null:jobKind.equals("grades")?grades==null:schedule==null)reason=reason.replace("已保留本地课表","暂无缓存，可稍后重试").replace("已保留上次记录","暂无缓存，可稍后重试");setState(reason);}
-    void showLogin(){if(credentialBusy)return;generation++;busy=false;automaticCredentials=null;autoRunning=false;web.stopLoading();verified=false;startActivityForResult(new Intent(this,LoginActivity.class),20);}
+    void showLogin(){if(credentialBusy)return;teachingSessionGeneration++;teachingSessionRestoring=false;teachingSessionReady=true;generation++;busy=false;automaticCredentials=null;autoRunning=false;web.stopLoading();verified=false;startActivityForResult(new Intent(this,LoginActivity.class),20);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==30 && result==RESULT_OK && data!=null && data.getData()!=null){importWallpaper(data.getData());}
         if(request==31){imageBusy=false;if(result==RESULT_OK){followBackgroundTheme();refreshAppearance();render();Toast.makeText(this,"裁切壁纸已保存",Toast.LENGTH_SHORT).show();}}
         if(request==20 && result==RESULT_OK){authenticated();handler.post(()->{if(!inBackground)sync();});}}
@@ -540,15 +558,12 @@ public class MainActivity extends Activity {
         control.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),surface,shape(palette.rippleMask,12)));
         TextView name=label(termName,14,palette.deepAccent,true);name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);name.setGravity(Gravity.CENTER_VERTICAL);name.setIncludeFontPadding(false);
         control.addView(name,new LinearLayout.LayoutParams(0,-1,1));
-        View arrow=new View(this){final android.graphics.Paint pen=new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-            @Override protected void onDraw(android.graphics.Canvas canvas){super.onDraw(canvas);pen.setColor(palette.deepAccent);pen.setStyle(android.graphics.Paint.Style.STROKE);pen.setStrokeWidth(dp(2));pen.setStrokeCap(android.graphics.Paint.Cap.ROUND);pen.setStrokeJoin(android.graphics.Paint.Join.ROUND);
-                float x=getWidth()/2f,y=getHeight()/2f;canvas.drawLine(x-dp(5),y-dp(2),x,y+dp(3),pen);canvas.drawLine(x,y+dp(3),x+dp(5),y-dp(2),pen);}
-        };arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);control.addView(arrow,new LinearLayout.LayoutParams(dp(24),dp(24)));
+        View arrow=new AppIcons.Glyph(this,R.drawable.ic_ui_down,palette.deepAccent,18);arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);control.addView(arrow,new LinearLayout.LayoutParams(dp(24),dp(24)));
         control.setContentDescription(actionName+"，"+termName);control.setFocusable(true);control.setOnClickListener(v->action.run());return control;
     }
     View iconButton(String title,int id,Runnable action){
         if(id==1)return RefreshIconButton.create(this,palette,title,action);
-        FrameLayout hit=new FrameLayout(this);MoreMenu.Icon icon=new MoreMenu.Icon(this,id,palette.deepAccent);icon.setBackground(shape(palette.entrySurface,11));icon.setDuplicateParentStateEnabled(true);hit.addView(icon,new FrameLayout.LayoutParams(dp(32),dp(32),Gravity.CENTER));hit.setContentDescription(title);hit.setFocusable(true);hit.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),null,shape(palette.rippleMask,12)));hit.setOnClickListener(v->action.run());return hit;
+        FrameLayout hit=new FrameLayout(this);MoreMenu.Icon icon=new MoreMenu.Icon(this,id,palette.deepAccent);icon.setDuplicateParentStateEnabled(true);hit.addView(icon,new FrameLayout.LayoutParams(dp(32),dp(32),Gravity.CENTER));hit.setContentDescription(title);hit.setFocusable(true);hit.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x22000000),null,shape(palette.rippleMask,12)));hit.setOnClickListener(v->action.run());return hit;
     }
     void showGradeSummary(){
         summaryAll=true;UiSheet sheet=new UiSheet(this,"成绩汇总","学校统计 · 主修有效成绩",.83f);gradeSummarySheet=sheet;
@@ -599,13 +614,13 @@ public class MainActivity extends Activity {
         for(Course c:localCourses){LinearLayout item=panel();item.setPadding(dp(16),dp(13),dp(16),dp(13));LinearLayout title=row();View swatch=new View(this);swatch.setBackground(shape(courseColor(c),4));title.addView(swatch,new LinearLayout.LayoutParams(dp(7),dp(28)));TextView name=label(c.name,16,INK,true);name.setPadding(dp(10),0,0,0);title.addView(name);item.addView(title);space(item,8);item.addView(label("周"+"一二三四五六日".charAt(c.day-1)+" · "+c.start+"–"+c.end+" 节 · "+c.weekText+" 周",12,MUTED,false));item.addView(label((c.term.equals("*")?"所有学期":c.term)+(c.room.isEmpty()?"":" · "+c.room),12,MUTED,false));item.setOnClickListener(v->{sheet.dialog.dismiss();detail(c);});item.setFocusable(true);item.setContentDescription(c.name+"，自定义课程，点按管理");content.addView(item);space(content,10);}
         sheet.actions(this,"＋ 添加课程",()->{sheet.dialog.dismiss();editCustom(null);});showSheet(sheet);
     }
-    String authStatus(){if(credentialBusy)return "正在处理本机凭证…";if(autoRunning)return "正在自动登录…";if(verified)return "已登录 · 教务连接正常";if(prefs.getBoolean("autoBlocked",false))return "需要重新登录或验证码";if(prefs.getBoolean("loginCompleted",false))return busy?"登录状态验证中…":"登录状态待联网验证";return "未登录";}
+    String authStatus(){if(credentialBusy)return "正在处理本机凭证…";if(autoRunning)return "正在自动登录…";if(verified)return "已登录 · 教务连接正常";if(prefs.getBoolean("autoBlocked",false))return qrLogin()?"扫码会话已失效 · 建议密码登录":"需要重新登录或验证码";if(prefs.getBoolean("loginCompleted",false))return busy?"登录状态验证中…":"登录状态待联网验证";return "未登录";}
     View userView(){
         LinearLayout content=column();content.setPadding(dp(6),dp(12),dp(6),dp(18));LinearLayout user=panel();MoreMenu.Icon avatar=new MoreMenu.Icon(this,4,INK);avatar.setBackground(shape(palette.selectedSurface,20));user.addView(avatar,new LinearLayout.LayoutParams(dp(60),dp(60)));space(user,16);user.addView(label("教务账号",22,INK,true));space(user,8);authStatusText=label(authStatus(),15,INK,true);user.addView(authStatusText);
         long at=prefs.getLong("lastAuthAt",0);if(at>0){space(user,6);user.addView(label("最近验证 "+stamp(at),12,MUTED,false));}space(user,20);
         TextView login=button(verified?"重新登录 / 更换账号":"登录教务账号",()->showLogin());login.setBackground(shape(PRIMARY,16));login.setTextColor(ON_PRIMARY);user.addView(login,new LinearLayout.LayoutParams(-1,dp(48)));content.addView(user);space(content,16);
-        LinearLayout storage=panel();Switch automatic=new Switch(this);SwitchTheme.apply(automatic,palette);automatic.setText("自动登录");automatic.setTextSize(16);automatic.setTextColor(INK);automatic.setChecked(prefs.getBoolean("autoLogin",true)&&CredentialStore.exists(this));automatic.setEnabled(!credentialBusy);storage.addView(automatic);space(storage,10);
-        storage.addView(label(CredentialStore.exists(this)?"登录凭证已加密保存在本机。会话过期后尝试自动续登；验证码需手动填写。":"登录时开启「保存凭证并自动登录」，以后打开应用可自动续登。",13,MUTED,false));
+        LinearLayout storage=panel();Switch automatic=new Switch(this);SwitchTheme.apply(automatic,palette);automatic.setText(qrLogin()?"保存扫码会话":"自动登录");automatic.setTextSize(16);automatic.setTextColor(INK);automatic.setChecked(prefs.getBoolean("autoLogin",true)&&(qrLogin()?TeachingSessionStore.exists(this):CredentialStore.exists(this)));automatic.setEnabled(!credentialBusy);storage.addView(automatic);space(storage,10);
+        storage.addView(label(qrLogin()?(TeachingSessionStore.exists(this)?"扫码会话已加密保存在本机，下次打开会先验证会话。学校会话过期后需重新扫码。":"登录时开启「保存扫码登录会话」，下次打开可复用有效会话。"):(CredentialStore.exists(this)?"登录凭证已加密保存在本机。会话过期后尝试自动续登；验证码需手动填写。":"登录时开启「保存凭证并自动登录」，以后打开应用可自动续登。"),13,MUTED,false));
         automatic.setOnCheckedChangeListener((v,enabled)->{if(enabled){prefs.edit().putBoolean("autoLogin",true).apply();showLogin();}else clearCredentials(false);});
         space(storage,18);TextView logout=themedButton("退出登录并清除凭证",()->logout(),false);logout.setEnabled(!credentialBusy);logout.setAlpha(credentialBusy?.45f:1f);storage.addView(logout,new LinearLayout.LayoutParams(-1,dp(48)));content.addView(storage);space(content,16);
         LinearLayout identity=panel();identity.addView(label("统一身份认证",22,INK,true));space(identity,8);
@@ -630,12 +645,12 @@ public class MainActivity extends Activity {
         });});showSheet(sheet);
     }
     void clearCredentials(boolean logout){
-        if(credentialBusy)return;credentialBusy=true;generation++;busy=false;autoRunning=false;automaticCredentials=null;web.stopLoading();
+        if(credentialBusy)return;credentialBusy=true;teachingSessionGeneration++;teachingSessionRestoring=false;teachingSessionReady=true;generation++;busy=false;autoRunning=false;automaticCredentials=null;web.stopLoading();
         prefs.edit().putBoolean("autoLogin",false).apply();
-        authIo.execute(()->{CredentialStore.clear(this);handler.post(()->{if(isDestroyed())return;
+        authIo.execute(()->{CredentialStore.clear(this);TeachingSessionStore.clear(this);handler.post(()->{if(isDestroyed())return;
             if(logout){prefs.edit().putBoolean("loginCompleted",false).putBoolean("autoBlocked",false).remove("lastAuthAt").apply();verified=false;
                 SessionCookies.teaching(()->{credentialBusy=false;setState("已退出登录 · 本地课程继续保留");render();});
-            }else{credentialBusy=false;setState("自动登录已关闭，保存的凭证已清除");render();}
+            }else{credentialBusy=false;setState("登录保存已关闭，加密凭证与会话已清除");render();}
         });});render();
     }
     void logout(){
@@ -698,7 +713,7 @@ public class MainActivity extends Activity {
     LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
     LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
     LinearLayout.LayoutParams weighted(){return new LinearLayout.LayoutParams(0,dp(44),1);}
-    TextView label(String s,int size,int color,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setFontFeatureSettings("kern");if(bold)v.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));return v;}
+    TextView label(String s,int size,int color,boolean bold){TextView v=new AppIcons.Label(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setFontFeatureSettings("kern");if(bold)v.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));return v;}
     TextView button(String s,Runnable action){TextView v=label(s,13,ACCENT_TEXT,true);v.setGravity(Gravity.CENTER);v.setPadding(dp(12),dp(10),dp(12),dp(10));v.setMinHeight(dp(44));v.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x33000000),shape(Color.TRANSPARENT,14),shape(palette.rippleMask,14)));v.setOnClickListener(x->action.run());v.setFocusable(true);v.setContentDescription(s);return v;}
     TextView themedButton(String text,Runnable action,boolean filled){
         TextView control=button(text,action);control.setTextColor(filled?ON_PRIMARY:palette.deepAccent);control.setIncludeFontPadding(false);control.setPadding(dp(14),0,dp(14),0);

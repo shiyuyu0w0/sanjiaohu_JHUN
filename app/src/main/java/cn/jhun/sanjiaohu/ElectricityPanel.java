@@ -28,6 +28,8 @@ final class ElectricityPanel {
     final ElectricityApi.Reading[] readings=new ElectricityApi.Reading[3];
     String building,floor,room,adapter;int epoch;Future<?> pending;boolean busy,checkout,disposed,integerOnly,connected;
     Dialog sheet;
+    ElectricityOrdersDialog orders;
+    final TextView ordersButton;
 
     ElectricityPanel(IdentityActivity a){
         this.a=a;t=a.theme;prefs=a.getSharedPreferences("electricity",0);
@@ -37,12 +39,13 @@ final class ElectricityPanel {
         content=a.column();content.setPadding(a.dp(20),a.dp(20),a.dp(20),a.dp(28));view.addView(content);
         LinearLayout selection=a.column();selection.setPadding(a.dp(18),a.dp(18),a.dp(18),a.dp(18));selection.setBackground(a.shape(t.controlSurface,24));
         selection.addView(a.text("宿舍楼",12,t.muted,false));a.gap(selection,8);
-        buildingButton=a.action("选择宿舍楼  ›",false,()->chooseBuilding());selection.addView(buildingButton,new LinearLayout.LayoutParams(-1,a.dp(52)));a.gap(selection,14);
+        buildingButton=a.action("选择宿舍楼",false,()->chooseBuilding());AppIcons.trailing(buildingButton,R.drawable.ic_ui_right);selection.addView(buildingButton,new LinearLayout.LayoutParams(-1,a.dp(52)));a.gap(selection,14);
         LinearLayout row=a.row(),left=a.column(),right=a.column();left.addView(a.text("楼层 / 单元",12,t.muted,false));right.addView(a.text("房间",12,t.muted,false));a.gap(left,8);a.gap(right,8);
-        floorButton=a.action("选楼层/单元  ›",false,()->chooseFloor());roomButton=a.action("选择房间  ›",false,()->chooseRoom());left.addView(floorButton,new LinearLayout.LayoutParams(-1,a.dp(52)));right.addView(roomButton,new LinearLayout.LayoutParams(-1,a.dp(52)));
+        floorButton=a.action("选楼层/单元",false,()->chooseFloor());AppIcons.trailing(floorButton,R.drawable.ic_ui_right);roomButton=a.action("选择房间",false,()->chooseRoom());AppIcons.trailing(roomButton,R.drawable.ic_ui_right);left.addView(floorButton,new LinearLayout.LayoutParams(-1,a.dp(52)));right.addView(roomButton,new LinearLayout.LayoutParams(-1,a.dp(52)));
         row.addView(left,new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,-2,1);rp.leftMargin=a.dp(12);row.addView(right,rp);selection.addView(row);content.addView(selection);
         a.gap(content,14);hint=a.text("正在连接电费服务…",12,t.muted,false);hint.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(hint);a.gap(content,18);
         cards=a.column();content.addView(cards);a.gap(content,20);footnote=a.text("空调与照明分别计量、分别缴费。\n从支付宝返回后可刷新电量，到账以学校系统为准。",12,t.muted,false);content.addView(footnote);a.gap(content,14);
+        ordersButton=a.action("历史缴费订单",false,this::openOrders);AppIcons.trailing(ordersButton,R.drawable.ic_ui_right);content.addView(ordersButton,new LinearLayout.LayoutParams(-1,a.dp(48)));a.gap(content,12);
         content.addView(a.action("重新登录电费服务",false,()->a.manualLogin()),new LinearLayout.LayoutParams(-1,a.dp(46)));
         view.setVisibility(View.GONE);a.body.addView(view,new android.widget.FrameLayout.LayoutParams(-1,-1));renderCards();buttons();
     }
@@ -87,9 +90,11 @@ final class ElectricityPanel {
     }
     void refresh(){if(!connected||busy)return;if(buildings==null)catalog();else if(!building.isEmpty()&&floors==null)loadFloors();else if(!floor.isEmpty()&&rooms==null)loadRooms();else if(!room.isEmpty())query();else hint.setText("请选择宿舍楼、楼层或单元、房间");}
     void buttons(){
-        buildingButton.setText(building.isEmpty()?"选择宿舍楼  ›":building+"  ›");floorButton.setText(floor.isEmpty()?"选楼层/单元  ›":ElectricityModel.levelLabel(floor)+"  ›");roomButton.setText(room.isEmpty()?"选择房间  ›":room+" 室  ›");
+        buildingButton.setText(building.isEmpty()?"选择宿舍楼":building+"");floorButton.setText(floor.isEmpty()?"选楼层/单元":ElectricityModel.levelLabel(floor)+"");roomButton.setText(room.isEmpty()?"选择房间":room+" 室");
         enable(buildingButton,connected&&!busy&&buildings!=null);enable(floorButton,connected&&!busy&&floors!=null);enable(roomButton,connected&&!busy&&rooms!=null);
+        enable(ordersButton,connected&&!checkout);
     }
+    void openOrders(){if(disposed||!connected||checkout)return;if(orders!=null&&!orders.disposed)return;orders=new ElectricityOrdersDialog(a);orders.show();}
     void enable(View v,boolean enabled){v.setEnabled(enabled);v.setAlpha(enabled?1f:.5f);}
     void save(){prefs.edit().putString("building",building).putString("floor",floor).putString("room",room).apply();}
     void chooseBuilding(){if(buildings!=null)choices("选择宿舍楼",new ArrayList<>(buildings.keySet()),value->{building=value;floor="";room="";save();loadFloors();});}
@@ -148,5 +153,5 @@ final class ElectricityPanel {
         });
     }
     boolean back(){if(visible())return false;if(checkout){checkout=false;a.setWebVisible(false);invalidate();connecting();a.startPage(ElectricityApi.PAGE);return true;}return false;}
-    void destroy(){disposed=true;invalidate();worker.shutdownNow();}
+    void destroy(){disposed=true;if(orders!=null)orders.dialog.dismiss();invalidate();worker.shutdownNow();}
 }
