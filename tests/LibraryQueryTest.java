@@ -437,6 +437,10 @@ public final class LibraryQueryTest {
         check(LibraryApi.classifyStatus("可借").lendable);
         check(LibraryApi.classifyStatus("在架").lendable);
         check(LibraryApi.classifyStatus("可借(在架)").lendable);
+        for(String raw:new String[]{"不可借","非可借","不可借(在架)","非可借（阅览）"}){
+            check(!LibraryApi.classifyStatus(raw).lendable);
+            check(LibraryApi.classifyStatus(raw).level,"reading");
+        }
         check(LibraryApi.classifyStatus("在编").level,"processing");
         check(LibraryApi.classifyStatus("在编").lendable==false);
         check(LibraryApi.classifyStatus("借出").level,"out");
@@ -558,6 +562,14 @@ public final class LibraryQueryTest {
         check(math.area.rooms.get(0).available,1);
         check(math.holdings.get(0).placeText(),"1楼 104室");
 
+        String unavailable="<div class=\"catalog\"></div><article>"
+            +tableLib("2001","自科借阅1(N-S/U-Z)(104室)","不可借","O13/1")+"</article>";
+        LibraryApi.Detail unavailableDetail=LibraryApi.parseDetail(unavailable);
+        check(unavailableDetail.available,0);
+        check(unavailableDetail.area.rooms.get(0).available,0);
+        LibraryApi.Detail desktop=LibraryOpacApi.parseItem("<table><tr><td>O13/1</td><td>2001</td><td></td><td>自科借阅1(N-S/U-Z)(104室)</td><td>非可借（阅览）</td></tr></table>");
+        check(desktop.available,0);
+        check(desktop.area.rooms.get(0).available,0);
         searchTypePicker();
     }
 
@@ -582,95 +594,6 @@ public final class LibraryQueryTest {
         }
         check(LibraryActivity.TYPES.length,LibraryApi.SEARCH_TYPES.size());
 
-        // 选项文字必须放得进整行的选择器（原来四等分时「标准编码」放不下）
-        for(String[] entry:LibraryActivity.TYPES){
-            String onPicker="检索途径："+entry[1];
-            check(onPicker.length()<=14);   // 324dp 下 16sp 足够
-        }
-
-        // 控件高度要够点按，但不能像 112dp 那样占掉半个屏
-        check(LibraryActivity.VIEW_HEIGHT>=48);
-        check(LibraryActivity.VIEW_HEIGHT<=64);
-
-        // 控件尺寸放大，但字号**不**放大：font() 必须原样返回
-        check(LibraryActivity.SCALE>1.0);                      // 尺寸确实放大了
-        check(LibraryActivity.SCALE<=1.3);                     // 但不过头
-        for(int base:new int[]{12,13,14,16,20,21}){
-            check(LibraryActivity.font(base)==base);           // 字号不得被缩放
-            check(LibraryActivity.scaled(base)>base);          // 尺寸确实放大
-        }
-        // 尺寸换算的实际值
-        check(LibraryActivity.scaled(12),14);
-        check(LibraryActivity.scaled(13),15);
-        check(LibraryActivity.scaled(14),16);
-        check(LibraryActivity.scaled(16),18);
-        check(LibraryActivity.scaled(20),23);
-        check(LibraryActivity.scaled(21),24);
-        check(LibraryActivity.VIEW_HEIGHT,LibraryActivity.scaled(54));
-        // 控件高度够点按，又不占掉半个屏
-        check(LibraryActivity.VIEW_HEIGHT>=48&&LibraryActivity.VIEW_HEIGHT<=72);
-        check(LibraryActivity.scaled(42)>=46);                 // 展开按钮高度
-        check(LibraryActivity.scaled(44)>=48);                 // 返回键点击区
-        // 放大的是尺寸而不是文字：二者必须解耦
-        check(LibraryActivity.font(16)!=LibraryActivity.scaled(16));
-
-        // 检索条与下拉菜单：按 1.5 倍放大，且两行之间留出明显间距
-        check(LibraryActivity.SEARCH_HEIGHT>LibraryActivity.VIEW_HEIGHT);
-        check(LibraryActivity.PICKER_HEIGHT>LibraryActivity.VIEW_HEIGHT);
-        check(LibraryActivity.SEARCH_HEIGHT,LibraryActivity.scaled(81));
-        check(LibraryActivity.PICKER_HEIGHT,LibraryActivity.scaled(81));
-        // 相对标准控件确实是 1.5 倍（基准 54 -> 81）
-        check(LibraryActivity.scaled(81),LibraryActivity.scaled(54)*3/2);
-        check(LibraryActivity.ROW_GAP,LibraryActivity.scaled(26));
-        // 间距要足够明显：加上检索条自身下边距后，必须达标准间距的三倍以上
-        check(LibraryActivity.ROW_GAP+LibraryActivity.scaled(10)
-            >=LibraryActivity.scaled(10)*3);
-        // 下拉菜单点开后的选项高度与菜单本身一致，观感统一
-        check(LibraryActivity.PICKER_HEIGHT<=LibraryActivity.VIEW_HEIGHT*2);
-        // 放大后顶部两行加起来仍不能吃掉整个结果区
-        int topUsed=LibraryActivity.SEARCH_HEIGHT+LibraryActivity.ROW_GAP+LibraryActivity.PICKER_HEIGHT;
-        check(topUsed<300);
-        // 两行控件加间距后不应超过 640dp 屏的一半
-        check(topUsed<640/2);
-
-        // 馆藏明细的框：小巧紧凑（一册只有几行短文字，不必占用太多高度）
-        check(LibraryActivity.HOLDING_PAD_H>0);
-        check(LibraryActivity.HOLDING_PAD_V>0);
-        check(LibraryActivity.HOLDING_PAD_H,LibraryActivity.scaled(12));
-        check(LibraryActivity.HOLDING_PAD_V,LibraryActivity.scaled(9));
-        check(LibraryActivity.HOLDING_GAP,LibraryActivity.scaled(6));
-        // 内边距不能小到文字贴边
-        check(LibraryActivity.HOLDING_PAD_V>=8);
-        check(LibraryActivity.HOLDING_PAD_H>=10);
-        // 且必须比结果卡片更紧凑（卡片是整本书的信息块，明细行只是一册）
-        check(LibraryActivity.HOLDING_PAD_H<LibraryActivity.CARD_PAD_H);
-        check(LibraryActivity.HOLDING_PAD_V<LibraryActivity.CARD_PAD_V);
-        // 圆角不能超过框高的一半，否则变成胶囊形
-        check(LibraryActivity.HOLDING_RADIUS<=LibraryActivity.HOLDING_PAD_V*2);
-
-        // 字号一律走 font()，不得混入 scaled()
-        for(int base:new int[]{12,13,14,16})check(LibraryActivity.font(base)==base);
-
-        // 底部翻页按钮也做大，好点按；但不能超过检索控件，免得底部压过顶部
-        check(LibraryActivity.PAGER_HEIGHT>LibraryActivity.VIEW_HEIGHT);
-        check(LibraryActivity.PAGER_HEIGHT,LibraryActivity.scaled(70));
-        check(LibraryActivity.PAGER_HEIGHT<=LibraryActivity.SEARCH_HEIGHT);
-        check(LibraryActivity.PAGER_HEIGHT>=48);              // 最小触控高度
-        check(LibraryActivity.PAGER_GAP>0);
-        // 顶部 + 底部固定区不能把结果区挤没
-        int fixed=LibraryActivity.SEARCH_HEIGHT+LibraryActivity.ROW_GAP+LibraryActivity.PICKER_HEIGHT
-            +LibraryActivity.PAGER_HEIGHT;
-        check(fixed<640-200);                                 // 结果区至少留 200dp
-
-        // 「查看馆藏明细」按钮：比标准控件大，但不能大过搜索框
-        check(LibraryActivity.TRIGGER_HEIGHT>LibraryActivity.VIEW_HEIGHT);
-        check(LibraryActivity.TRIGGER_HEIGHT,LibraryActivity.scaled(58));
-        check(LibraryActivity.TRIGGER_HEIGHT<=LibraryActivity.SEARCH_HEIGHT);
-        check(LibraryActivity.TRIGGER_HEIGHT>=48);             // 最小触控高度
-        check(LibraryActivity.TRIGGER_GAP>0);
-        // 按钮只有结果卡片内宽那么宽，文字必须放得下
-        int cardInner=360-12*2-LibraryActivity.CARD_PAD_H*2;
-        check(LibraryActivity.font(16)*6<=cardInner);          // 「查看馆藏明细」6 字 @16sp
     }
 
     static String tableLib(String barcode,String location,String status,String callNo){

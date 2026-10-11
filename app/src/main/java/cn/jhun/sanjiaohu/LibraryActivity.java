@@ -33,55 +33,24 @@ public final class LibraryActivity extends Activity {
     ThemePalette theme;
     EditText keyword;
     LinearLayout results,typeRow;
-    TextView status,emptyView,prevButton,nextButton,pageLabel,typePicker,subtitle;
+    TextView status,emptyView,prevButton,nextButton,pageLabel,typePicker,subtitle,searchButton;
+    ProgressBar progress;
     ScrollView scroller;
     String searchType="title";
     final ExecutorService work=Executors.newSingleThreadExecutor();
-    int generation;
+    volatile int generation;
     boolean busy;
     final List<LibraryApi.Item> items=new ArrayList<>();
 
     /** 翻页状态。站点每页固定 20 条，页码从 1 开始。 */
-    String lastKeyword="";
+    String lastKeyword="",lastType="",lastRoute="";
     int page=1,pages=1,total=0;
 
-    /** 结果卡片沿用首页卡片的圆角与内边距，保持观感统一。 */
+    // Match the spacing, touch targets and rounded cards used by the other native pages.
     static final int CARD_RADIUS=20,CARD_PAD_H=18,CARD_PAD_V=16;
-    /**
-     * 本页**控件尺寸**（高度、按钮宽、内边距）的放大比例。
-     * 只作用于尺寸，**不作用于字号**——字号一律保持基准值，见 {@link #font}。
-     */
-    static final double SCALE=1.15;
-    /** 尺寸按 SCALE 换算后取整。仅用于 dp 尺寸，不要用来算字号。 */
-    static int scaled(int base){return (int)Math.round(base*SCALE);}
-    /**
-     * 字号原样返回。控件放大时字不跟着放大，避免文字显得又大又挤。
-     * 单独留这个函数是为了让「字号不缩放」这件事在代码里是显式的，
-     * 也防止以后有人顺手把字号也套进 scaled()。
-     */
-    static int font(int base){return base;}
-
-    /** 输入框、按钮等控件的标准高度（放大后 62dp，首页卡片 112dp 是整块入口的高度，不适用）。 */
-    static final int VIEW_HEIGHT=scaled(54);
-    /** 检索输入框、搜索按钮与检索途径下拉：按 1.5 倍的控件基准再放大。 */
-    static final int SEARCH_HEIGHT=scaled(81);
-    static final int PICKER_HEIGHT=scaled(81);
-    /** 检索条与下拉菜单之间的额外间距。加高后要拉得更开，避免两行贴在一起。 */
-    static final int ROW_GAP=scaled(26);
-    /**
-     * 馆藏明细每一册的框。一册只有几行短文字，框内边距收小、彼此间距也收小，
-     * 多册时才不至于一屏放不下；状态行仍与上方留一点距离，不贴着框边。
-     */
-    static final int HOLDING_PAD_H=scaled(12);
-    static final int HOLDING_PAD_V=scaled(9);
-    static final int HOLDING_GAP=scaled(6);
-    static final int HOLDING_RADIUS=14;
-    /** 底部翻页按钮：与检索控件一样做成大按钮，好点按。 */
-    static final int PAGER_HEIGHT=scaled(70);
-    static final int PAGER_GAP=scaled(10);
-    /** 每张结果卡片里的「查看馆藏明细」按钮，以及它与上方文字的距离。 */
-    static final int TRIGGER_HEIGHT=scaled(58);
-    static final int TRIGGER_GAP=scaled(10);
+    static final int VIEW_HEIGHT=48,SEARCH_HEIGHT=52,PICKER_HEIGHT=44,ROW_GAP=12;
+    static final int HOLDING_PAD_H=12,HOLDING_PAD_V=10,HOLDING_GAP=8,HOLDING_RADIUS=14;
+    static final int PAGER_HEIGHT=44,PAGER_GAP=8,TRIGGER_HEIGHT=44,TRIGGER_GAP=12;
 
     static final String[][] TYPES={{"title","题名"},{"keyword","主题词"},{"author","著者"},{"isbn","标准编码"}};
 
@@ -95,12 +64,12 @@ public final class LibraryActivity extends Activity {
         LinearLayout root=column();root.setBackgroundColor(theme.surface);
         root.setOnApplyWindowInsetsListener((v,i)->{v.setPadding(i.getSystemWindowInsetLeft(),i.getSystemWindowInsetTop(),i.getSystemWindowInsetRight(),i.getSystemWindowInsetBottom());return i.consumeSystemWindowInsets();});
 
-        LinearLayout header=row();header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(18),scaled(10),dp(18),scaled(10));
-        header.addView(action("‹","返回",()->finish()),new LinearLayout.LayoutParams(scaled(44),scaled(44)));
+        LinearLayout header=row();header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(18),dp(10),dp(18),dp(10));
+        header.addView(action("‹","返回",()->finish()),new LinearLayout.LayoutParams(dp(44),dp(44)));
         LinearLayout titles=column();titles.setPadding(dp(14),0,dp(8),0);
-        TextView title=text("图书馆查询",font(21),theme.text,true);titles.addView(title);
-        // 副标题显示当前线路：优先桌面版，不可用时回退移动版，用户能看到实际走的是哪条
-        subtitle=text("江汉大学图书馆 · 馆藏与位置",font(12),theme.muted,false);
+        TextView title=text("图书馆查询",21,theme.text,true);titles.addView(title);
+        // The page subtitle describes the service rather than its internal route.
+        subtitle=text("江汉大学图书馆 · 馆藏与位置",12,theme.muted,false);
         titles.addView(subtitle);
         header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
         root.addView(header);
@@ -108,63 +77,65 @@ public final class LibraryActivity extends Activity {
         // 检索条：输入框 + 搜索按钮
         LinearLayout search=row();search.setGravity(Gravity.CENTER_VERTICAL);search.setPadding(dp(18),dp(2),dp(18),0);
         keyword=new EditText(this);keyword.setHint("书名、作者或 ISBN");keyword.setSingleLine(true);
-        keyword.setTextSize(font(16));keyword.setTextColor(theme.text);keyword.setHintTextColor(theme.muted);
+        keyword.setTextSize(16);keyword.setTextColor(theme.text);keyword.setHintTextColor(theme.muted);
         keyword.setInputType(InputType.TYPE_CLASS_TEXT);keyword.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         keyword.setBackground(shape(theme.controlSurface,15));
-        // 框比文字高很多时，EditText 默认从顶部排字，看着偏上。
-        // 改成垂直居中，并去掉字体自带的上下额外行距，文字才真正落在框中间。
+        // Align input text with the adjacent search button.
         keyword.setGravity(Gravity.CENTER_VERTICAL);
         keyword.setIncludeFontPadding(false);
         keyword.setPadding(dp(14),0,dp(14),0);
         keyword.setContentDescription("检索词");
         keyword.setOnEditorActionListener((v,a,e)->{if(a==EditorInfo.IME_ACTION_SEARCH){runSearch(1);return true;}return false;});
-        search.addView(keyword,new LinearLayout.LayoutParams(0,SEARCH_HEIGHT,1));
-        LinearLayout.LayoutParams searchSize=new LinearLayout.LayoutParams(scaled(112),SEARCH_HEIGHT);searchSize.leftMargin=dp(10);
-        search.addView(themedButton("搜索",()->runSearch(1),true),searchSize);
+        search.addView(keyword,new LinearLayout.LayoutParams(0,dp(SEARCH_HEIGHT),1));
+        LinearLayout.LayoutParams searchSize=new LinearLayout.LayoutParams(dp(76),dp(SEARCH_HEIGHT));searchSize.leftMargin=dp(10);
+        searchButton=themedButton("搜索",()->runSearch(1),true);search.addView(searchButton,searchSize);
         root.addView(search);
 
-        // 检索途径：与上面的检索条隔开一段距离，自己再高一些，免得两行挤在一起
-        root.addView(new View(this),new LinearLayout.LayoutParams(1,ROW_GAP));
-        typeRow=row();typeRow.setPadding(dp(18),0,dp(18),scaled(10));
+        // Keep the field picker compact, like the term picker elsewhere in the app.
+        root.addView(new View(this),new LinearLayout.LayoutParams(1,dp(ROW_GAP)));
+        typeRow=row();typeRow.setPadding(dp(18),0,dp(18),dp(10));
         typePicker=themedButton("",()->chooseSearchType(),false);
-        typePicker.setTextSize(font(16));
+        typePicker.setTextSize(14);
         // 文字靠左、垂直居中；右侧留出下拉箭头的宽度，避免文字压到箭头上
         typePicker.setGravity(Gravity.CENTER_VERTICAL|Gravity.START);
-        typeRow.addView(typePicker,new LinearLayout.LayoutParams(-1,PICKER_HEIGHT));
+        typeRow.addView(typePicker,new LinearLayout.LayoutParams(-1,dp(PICKER_HEIGHT)));
         root.addView(typeRow);
         updateTypePicker();
 
-        status=text("输入关键词查询馆藏",font(13),theme.muted,false);
+        status=text("输入关键词查询馆藏",13,theme.muted,false);
         status.setPadding(dp(18),0,dp(18),dp(8));status.setLineSpacing(dp(3),1);
         root.addView(status);
+        progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);
+        progress.setIndeterminateTintList(ColorStateList.valueOf(theme.primary));progress.setVisibility(View.INVISIBLE);
+        root.addView(progress,new LinearLayout.LayoutParams(-1,dp(2)));
 
         scroller=new ScrollView(this);scroller.setVerticalScrollBarEnabled(false);scroller.setClipToPadding(false);
-        LinearLayout content=column();content.setPadding(dp(12),0,dp(12),dp(24));
+        LinearLayout content=column();content.setPadding(dp(18),0,dp(18),dp(20));
         results=column();content.addView(results);
-        emptyView=text("",font(14),theme.muted,false);emptyView.setGravity(Gravity.CENTER);
+        emptyView=text("",14,theme.muted,false);emptyView.setGravity(Gravity.CENTER);
         emptyView.setLineSpacing(dp(6),1);emptyView.setPadding(dp(20),dp(60),dp(20),dp(60));
         emptyView.setVisibility(View.GONE);content.addView(emptyView);
         scroller.addView(content);root.addView(scroller,new LinearLayout.LayoutParams(-1,0,1));
 
         // 翻页条固定在底部，不随结果滚动
-        LinearLayout pager=row();pager.setGravity(Gravity.CENTER_VERTICAL);pager.setPadding(dp(18),scaled(8),dp(18),scaled(10));
+        LinearLayout pager=row();pager.setGravity(Gravity.CENTER_VERTICAL);pager.setPadding(dp(18),dp(8),dp(18),dp(10));
         prevButton=themedButton("上一页",()->runSearch(page-1),false);
-        prevButton.setTextSize(font(16));
+        prevButton.setTextSize(14);
         prevButton.setContentDescription("上一页");
-        pager.addView(prevButton,new LinearLayout.LayoutParams(0,PAGER_HEIGHT,1));
-        pageLabel=text("",font(13),theme.muted,false);pageLabel.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams labelSize=new LinearLayout.LayoutParams(0,PAGER_HEIGHT,1);
+        pager.addView(prevButton,new LinearLayout.LayoutParams(0,dp(PAGER_HEIGHT),1));
+        pageLabel=text("",13,theme.muted,false);pageLabel.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams labelSize=new LinearLayout.LayoutParams(0,dp(PAGER_HEIGHT),1);
         labelSize.leftMargin=dp(PAGER_GAP);labelSize.rightMargin=dp(PAGER_GAP);
         pager.addView(pageLabel,labelSize);
-        nextButton=themedButton("下一页",()->runSearch(page+1),true);
-        nextButton.setTextSize(font(16));
+        nextButton=themedButton("下一页",()->runSearch(page+1),false);
+        nextButton.setTextSize(14);
         nextButton.setContentDescription("下一页");
-        pager.addView(nextButton,new LinearLayout.LayoutParams(0,PAGER_HEIGHT,1));
+        pager.addView(nextButton,new LinearLayout.LayoutParams(0,dp(PAGER_HEIGHT),1));
         root.addView(pager);
 
         setContentView(root);
         updatePager(false);
-        showEmpty("输入关键词查询馆藏\n\n支持题名、主题词、著者和 ISBN。\n首次查询只列出基本信息，点开某本书才读取馆藏明细。");
+        showEmpty("找一本想读的书\n\n输入书名、作者或 ISBN\n查看可借册数与馆藏位置");
     }
 
     /** 翻页条的状态。没有结果时整条隐藏，避免占位。 */
@@ -173,10 +144,10 @@ public final class LibraryActivity extends Activity {
         if(pager!=null)pager.setVisibility(visible?View.VISIBLE:View.GONE);
         if(!visible)return;
         pageLabel.setText("第 "+page+" / "+pages+" 页");
-        prevButton.setEnabled(canPrev(page));
-        prevButton.setAlpha(canPrev(page)?1f:.45f);
-        nextButton.setEnabled(canNext(page,pages));
-        nextButton.setAlpha(canNext(page,pages)?1f:.45f);
+        prevButton.setEnabled(!busy&&canPrev(page));
+        prevButton.setAlpha(!busy&&canPrev(page)?1f:.45f);
+        nextButton.setEnabled(!busy&&canNext(page,pages));
+        nextButton.setAlpha(!busy&&canNext(page,pages)?1f:.45f);
     }
     /** 第 1 页没有上一页。纯函数，便于无设备时回归。 */
     static boolean canPrev(int page){return page>1;}
@@ -201,30 +172,42 @@ public final class LibraryActivity extends Activity {
 
     /** 用与应用其它页面一致的方式列出检索途径，选中项打勾。 */
     void chooseSearchType(){
+        if(busy)return;
         final Dialog dialog=new Dialog(this);dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         FrameLayout outside=new FrameLayout(this);outside.setOnClickListener(v->dialog.dismiss());
         LinearLayout card=column();card.setPadding(dp(20),dp(18),dp(20),dp(14));
         card.setBackground(shape(theme.sheetSurface,26));card.setClipToOutline(true);card.setOnClickListener(v->{});
-        card.addView(text("选择检索途径",font(20),theme.text,true));
-        TextView caption=text("决定关键词匹配图书的哪个字段",font(12),theme.muted,false);
+        card.addView(text("选择检索途径",20,theme.text,true));
+        TextView caption=text("决定关键词匹配图书的哪个字段",12,theme.muted,false);
         caption.setPadding(0,dp(5),0,dp(6));card.addView(caption);
         for(final String[] entry:TYPES){
             boolean chosen=entry[0].equals(searchType);
             TextView choice=themedButton(entry[1]+(chosen?"  ✓":""),()->{
-                dialog.dismiss();searchType=entry[0];updateTypePicker();
+                dialog.dismiss();
+                if(entry[0].equals(searchType))return;
+                searchType=entry[0];updateTypePicker();
+                generation++;items.clear();countRows.clear();lastKeyword="";lastType="";lastRoute="";
+                page=pages=1;total=0;updatePager(false);
+                showEmpty("输入关键词，按"+entry[1]+"查询馆藏");
+                if(!keyword.getText().toString().trim().isEmpty())runSearch(1);
             },chosen);
-            choice.setTextSize(font(16));
-            LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(-1,VIEW_HEIGHT);
+            choice.setTextSize(16);
+            LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(-1,dp(VIEW_HEIGHT));
             size.topMargin=dp(8);card.addView(choice,size);
         }
-        FrameLayout.LayoutParams position=new FrameLayout.LayoutParams(-1,-2,Gravity.CENTER);
-        position.setMargins(dp(24),dp(24),dp(24),dp(24));outside.addView(card,position);
+        ScrollView choices=new ScrollView(this){@Override protected void onMeasure(int w,int h){
+            super.onMeasure(w,View.MeasureSpec.makeMeasureSpec((int)(getResources().getDisplayMetrics().heightPixels*.8f),View.MeasureSpec.AT_MOST));
+        }};
+        choices.setVerticalScrollBarEnabled(false);choices.addView(card);
+        FrameLayout.LayoutParams position=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);
+        position.setMargins(dp(12),0,dp(12),dp(12));outside.addView(choices,position);
         dialog.setContentView(outside);
         Window window=dialog.getWindow();
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);window.setDimAmount(.34f);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);window.setDimAmount(.24f);
+        window.setGravity(Gravity.BOTTOM);window.setWindowAnimations(R.style.SheetAnimation);
         dialog.show();
-        window.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels-dp(48),dp(420)),ViewGroup.LayoutParams.WRAP_CONTENT);
+        window.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels,dp(560)),ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     /**
@@ -232,47 +215,44 @@ public final class LibraryActivity extends Activity {
      * @param targetPage 页码，从 1 开始；越界时会被夹到 [1, pages]
      */
     void runSearch(int targetPage){
-        String word=keyword.getText().toString().trim();
+        final String word=keyword.getText().toString().trim();
         if(word.isEmpty()){toast("请先输入检索词");return;}
         if(busy){toast("正在查询，请稍候");return;}
-        // 换关键词时页数未知，先按第 1 页请求；同一关键词才允许翻页
-        if(!word.equals(lastKeyword))targetPage=1;
-
-        keyword.clearFocus();
-        hideKeyboard();
-        final int token=++generation;
-        final int requested=Math.max(1,targetPage);
-        busy=true;results.removeAllViews();emptyView.setVisibility(View.GONE);
-        updatePager(false);
-        status.setText(requested>1
-            ?"正在载入第 "+requested+" 页…"
-            :"正在检索「"+word+"」…");
+        final String type=searchType,previousRoute=lastRoute;
+        final int requested=LibraryPaging.requested(word,type,lastKeyword,lastType,targetPage);
+        keyword.clearFocus();hideKeyboard();
+        final int token=generation;
+        setBusy(true);emptyView.setVisibility(View.GONE);
+        status.setText(requested>1?"正在载入第 "+requested+" 页…":"正在检索「"+word+"」…");
         work.execute(()->{
             try{
-                LibraryApi.Page page=LibraryRoutes.search(word,searchType,requested);
-                if(token!=generation)return;
+                final LibraryApi.Page result=LibraryRoutes.search(word,type,requested,previousRoute);
                 runOnUiThread(()->{
-                    if(token!=generation)return;
-                    busy=false;
-                    showPage(word,page);
+                    if(token!=generation||isDestroyed())return;
+                    generation++;setBusy(false);showPage(word,result);
+                    if(result.pageReset)toast("查询结果已变化，已回到第一页");
                 });
             }catch(IOException error){
-                if(token!=generation)return;
                 runOnUiThread(()->{
-                    if(token!=generation)return;
-                    busy=false;
-                    status.setText("查询失败");
-                    // 翻页失败时保留已到达的页码，不要把用户弹回第 1 页
+                    if(token!=generation||isDestroyed())return;
+                    setBusy(false);
+                    status.setText(items.isEmpty()?"查询失败":"加载失败 · 仍显示「"+lastKeyword+"」第 "+page+" 页");
                     updatePager(!items.isEmpty());
-                    showEmpty(failureHint(error));
+                    if(items.isEmpty())showEmpty(failureHint(error));else toast(failureHint(error));
                 });
             }
         });
     }
 
+    void setBusy(boolean value){
+        busy=value;searchButton.setEnabled(!value);typePicker.setEnabled(!value);
+        searchButton.setAlpha(value?.5f:1f);typePicker.setAlpha(value?.5f:1f);
+        progress.setVisibility(value?View.VISIBLE:View.INVISIBLE);updatePager(!items.isEmpty());
+    }
+
     /** 显示一页结果，并同步翻页状态。 */
     void showPage(String word,LibraryApi.Page page){
-        lastKeyword=word;
+        lastKeyword=word;lastType=page.type;lastRoute=page.route;
         this.page=page.page;
         this.pages=Math.max(1,page.pages);
         this.total=page.total;
@@ -330,32 +310,13 @@ public final class LibraryActivity extends Activity {
         });
     }
 
-    /** 把当前实际使用的线路显示在副标题上，线路回退时用户能立刻察觉。 */
     void updateRouteHint(){
-        if(subtitle==null)return;
-        boolean opac=LibraryRoutes.OPAC.equals(LibraryRoutes.lastRoute());
-        subtitle.setText("江汉大学图书馆 · "+(opac?"馆藏检索":"移动版（备用线路）"));
+        subtitle.setText("江汉大学图书馆 · 馆藏与位置");
     }
 
-    /**
-     * 失败提示。
-     *
-     * 实测：图书馆的桌面版 OPAC（opac.lib.jhun.edu.cn:8080）**只对校园网开放**，
-     * 用流量访问时每次连接约 2 秒后失败。移动版流量也能用，所以正常情况下
-     * 会自动回退到移动版；两条都不通才提示检查网络。
-     * 不要把「服务仅校内开放」笼统地说成「网络有问题」——那会让人反复重试。
-     */
     String failureHint(IOException error){
         String message=error.getMessage()==null?"查询失败":error.getMessage();
-        boolean wifi=LibraryNetwork.onWifi();
-        StringBuilder text=new StringBuilder(message);
-        text.append("\n\n");
-        if(wifi){
-            text.append("当前为 Wi-Fi。图书馆服务需要校园网，请确认已连上校园网后重试。");
-        }else{
-            text.append("当前为移动数据。图书馆服务只在校园网内开放，请连接校园网后重试。");
-        }
-        return text.toString();
+        return message+"\n请检查网络后重试，或连接校园网再试。";
     }
 
     /** 结果卡片里「可借 N / M 册」那一行的引用，供后台补全时就地刷新。 */
@@ -371,35 +332,35 @@ public final class LibraryActivity extends Activity {
     void addCard(LibraryApi.Item item,int index){
         LinearLayout card=column();card.setPadding(dp(CARD_PAD_H),dp(CARD_PAD_V),dp(CARD_PAD_H),dp(CARD_PAD_V));
         card.setBackground(shape(theme.entrySurface,CARD_RADIUS));
-        LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(-1,-2);size.bottomMargin=dp(10);
+        LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(-1,-2);size.bottomMargin=dp(12);
         results.addView(card,size);
 
-        TextView title=text((index)+". "+(item.title.isEmpty()?"（无题名）":item.title),font(16),theme.text,true);
+        TextView title=text((index)+". "+(item.title.isEmpty()?"（无题名）":item.title),16,theme.text,true);
         title.setLineSpacing(dp(4),1);card.addView(title);
-        if(!item.author.isEmpty())card.addView(line(item.author,font(13),theme.muted));
-        if(!item.publisher.isEmpty())card.addView(line(item.publisher,font(12),theme.muted));
+        if(!item.author.isEmpty())card.addView(line(item.author,13,theme.muted));
+        if(!item.publisher.isEmpty())card.addView(line(item.publisher,12,theme.muted));
 
         // 可借 / 总藏。展开后会就地刷新这一行，所以留一个引用。
-        final TextView counts=line(availabilityLabel(item),font(13),
+        final TextView counts=line(availabilityLabel(item),13,
             item.available>0?theme.deepAccent:theme.muted);counts.setTypeface(Typeface.create("sans-serif-medium",0));
         card.addView(counts);
         // 桌面版列表不带这个数字，稍后由后台并发补全时就地刷新这一行
         if(item.available<0)countRows.put(item,counts);
-        if(!item.callNo.isEmpty())card.addView(line("索书号 "+item.callNo,font(13),theme.text));
+        if(!item.callNo.isEmpty())card.addView(line("索书号 "+item.callNo,13,theme.text));
 
         // 推测位置：有具体馆藏地时绝不覆盖，这里只是列表页的初判
         LibraryLocation.Guess guess=LibraryLocation.guessRoom(item.callNo);
         if(guess==null){
-            card.addView(line("位置：点开馆藏明细确认",font(12),theme.muted));
+            card.addView(line("位置：点开馆藏明细确认",12,theme.muted));
         }else{
             String where=guess.floor>0?guess.floor+"楼 "+guess.room:guess.room;
-            card.addView(line("推测位置 "+where+"（"+guess.note+"，点开馆藏明细确认）",font(12),theme.deepAccent));
+            card.addView(line("推测位置 "+where+"（"+guess.note+"，点开馆藏明细确认）",12,theme.deepAccent));
         }
 
         LinearLayout detailBox=column();detailBox.setVisibility(View.GONE);card.addView(detailBox);
 
         final TextView trigger=themedButton("查看馆藏明细",null,false);
-        trigger.setTextSize(font(16));
+        trigger.setTextSize(14);
         trigger.setOnClickListener(v->{
             if(item.detailLoaded){
                 boolean show=detailBox.getVisibility()!=View.VISIBLE;
@@ -409,13 +370,14 @@ public final class LibraryActivity extends Activity {
             }
             loadDetail(item,counts,detailBox,trigger);
         });
-        LinearLayout.LayoutParams openSize=new LinearLayout.LayoutParams(-1,TRIGGER_HEIGHT);
+        LinearLayout.LayoutParams openSize=new LinearLayout.LayoutParams(-1,dp(TRIGGER_HEIGHT));
         openSize.topMargin=dp(TRIGGER_GAP);
         card.addView(trigger,openSize);
     }
 
     /** 按需加载单本详情：一次请求，成功后填充并展开。 */
     void loadDetail(final LibraryApi.Item item,final TextView counts,final LinearLayout detailBox,final TextView trigger){
+        if(busy){toast("正在查询，请稍候");return;}
         final int token=generation;
         trigger.setText("正在读取馆藏…");trigger.setEnabled(false);
         work.execute(()->{
@@ -457,30 +419,30 @@ public final class LibraryActivity extends Activity {
                 String where=bucket.place.floor>0?bucket.place.floor+"楼 "+bucket.place.room:bucket.place.room;
                 if(where.trim().isEmpty())where=bucket.place.name;
                 String note=bucket.place.name+"　"+where+"　可借 "+bucket.available+"/"+bucket.total;
-                box.addView(line(note,font(13),theme.deepAccent));
+                box.addView(line(note,13,theme.deepAccent));
             }
         }
         if(area!=null&&area.vagueCount>0){
-            box.addView(line("有 "+area.vagueCount+" 册馆藏地未标注具体库室，需到馆查询。",font(12),theme.muted));
+            box.addView(line("有 "+area.vagueCount+" 册馆藏地未标注具体库室，需到馆查询。",12,theme.muted));
         }
         // 偶见的代码值（如 "304--113"）：说明无法据此推断，而不是让用户以为工具出错
         if(area!=null&&area.unusableLocations!=null&&!area.unusableLocations.isEmpty()){
-            box.addView(line("另有馆藏地写作「"+join(area.unusableLocations,"、")+"」，无法判断具体库室。",font(12),theme.muted));
+            box.addView(line("另有馆藏地写作「"+join(area.unusableLocations,"、")+"」，无法判断具体库室。",12,theme.muted));
         }
         if(area!=null&&!area.hasSpecific()&&area.guess!=null){
             LibraryLocation.Guess guess=area.guess;
             String where=guess.floor>0?guess.floor+"楼 "+guess.room:guess.room;
-            box.addView(line("馆藏地未标注具体库室。按中图法推测可能在 "+where+"（"+guess.note+"）",font(12),theme.deepAccent));
+            box.addView(line("馆藏地未标注具体库室。按中图法推测可能在 "+where+"（"+guess.note+"）",12,theme.deepAccent));
         }
-        if(detail.callNoClass.isEmpty()==false)box.addView(line("中图法分类号 "+detail.callNoClass,font(12),theme.muted));
-        if(!detail.isbn.isEmpty())box.addView(line("ISBN "+detail.isbn,font(12),theme.muted));
+        if(detail.callNoClass.isEmpty()==false)box.addView(line("中图法分类号 "+detail.callNoClass,12,theme.muted));
+        if(!detail.isbn.isEmpty())box.addView(line("ISBN "+detail.isbn,12,theme.muted));
 
         if(detail.holdings.isEmpty()){
-            box.addView(line("这本书暂时没有可显示的馆藏记录。",font(12),theme.muted));
+            box.addView(line("这本书暂时没有可显示的馆藏记录。",12,theme.muted));
             return;
         }
         box.addView(line("",1,theme.muted));
-        box.addView(line("馆藏明细（"+detail.holdings.size()+" 册）",font(13),theme.text,true));
+        box.addView(line("馆藏明细（"+detail.holdings.size()+" 册）",13,theme.text,true));
         for(LibraryApi.Holding holding:detail.holdings){
             LinearLayout row=column();
             row.setPadding(dp(HOLDING_PAD_H),dp(HOLDING_PAD_V),dp(HOLDING_PAD_H),dp(HOLDING_PAD_V));
@@ -490,14 +452,14 @@ public final class LibraryActivity extends Activity {
             box.addView(row,rowSize);
 
             String state=holding.status.isEmpty()?"状态未知":holding.status;
-            TextView head=line(state+"　"+holding.placeText(),font(13),holding.lendable?theme.deepAccent:theme.text,true);
+            TextView head=line(state+"　"+holding.placeText(),13,holding.lendable?theme.deepAccent:theme.text,true);
             head.setPadding(0,0,0,dp(3));
             row.addView(head);
             // 明细行改用紧凑行距：一册最多 4 行，用常规 line() 的上下留白会撑高整个框
-            if(!holding.barcode.isEmpty())row.addView(dense("条码号 "+holding.barcode,font(12),theme.muted));
-            if(!holding.callNo.isEmpty())row.addView(dense("索书号 "+holding.callNo,font(12),theme.muted));
-            if(!holding.returnLocation.isEmpty())row.addView(dense("还书位置 "+holding.returnLocation,font(12),theme.muted));
-            if(!holding.location.isEmpty())row.addView(dense("馆藏地 "+holding.location,font(12),theme.muted));
+            if(!holding.barcode.isEmpty())row.addView(dense("条码号 "+holding.barcode,12,theme.muted));
+            if(!holding.callNo.isEmpty())row.addView(dense("索书号 "+holding.callNo,12,theme.muted));
+            if(!holding.returnLocation.isEmpty())row.addView(dense("还书位置 "+holding.returnLocation,12,theme.muted));
+            if(!holding.location.isEmpty())row.addView(dense("馆藏地 "+holding.location,12,theme.muted));
         }
     }
 
@@ -551,8 +513,8 @@ public final class LibraryActivity extends Activity {
         button.setOnClickListener(v->run.run());return button;
     }
     TextView themedButton(String value,Runnable run,boolean filled){
-        TextView button=text(value,font(14),filled?theme.onPrimary:theme.deepAccent,false);button.setGravity(Gravity.CENTER);
-        button.setContentDescription(value);button.setFocusable(true);button.setIncludeFontPadding(false);
+        TextView button=text(value,14,filled?theme.onPrimary:theme.deepAccent,false);button.setGravity(Gravity.CENTER);
+        button.setContentDescription(value);button.setFocusable(true);button.setIncludeFontPadding(false);button.setPadding(dp(14),0,dp(14),0);
         GradientDrawable fill=shape(filled?theme.primary:theme.controlSurface,14);
         if(!filled)fill.setStroke(dp(1),theme.outline);
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(((filled?theme.onPrimary:theme.primary)&0xffffff)|0x22000000),fill,shape(theme.rippleMask,14)));

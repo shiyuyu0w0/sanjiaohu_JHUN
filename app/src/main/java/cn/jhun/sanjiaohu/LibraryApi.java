@@ -222,13 +222,13 @@ final class LibraryApi {
         if(s.equals("赠送出"))return new Status("given",s,false);
         if(s.equals("声明丢失"))return new Status("lost",s,false);
         if(s.equals("剔旧报废"))return new Status("lost",s,false);
-        // 含「可借」字样的变体，如「可借(在架)」
-        if(s.contains("可借"))return new Status("available",s,true);
+        // 否定状态必须先匹配，避免「不可借」被「可借」子串抢先命中。
+        if(s.contains("非可借")||s.contains("不可借"))return new Status("reading",s,false);
         if(s.contains("在编"))return new Status("processing",s,false);
         // 下架/剔旧/赠送等一律不可借
         if(s.contains("赠送")||s.contains("剔旧")||s.contains("报废")||s.contains("下架"))return new Status("lost",s,false);
         if(s.contains("丢失")||s.contains("遗失"))return new Status("lost",s,false);
-        if(s.contains("非可借")||s.contains("不可借"))return new Status("reading",s,false);
+        if(s.contains("可借"))return new Status("available",s,true);
         // 「借出-应还日期：2027-04-10」这类带日期的写法
         if(s.contains("借出"))return new Status("out",s,false);
         return new Status("unknown",s,false);
@@ -257,7 +257,7 @@ final class LibraryApi {
 
     /** 单页检索结果。 */
     static final class Page {
-        int total;String kw="",type="title";List<Item> items=new ArrayList<>();int page=1;int pages=1;boolean hasNext,truncated;
+        int total;String kw="",type="title",route="";List<Item> items=new ArrayList<>();int page=1;int pages=1;boolean hasNext,truncated,pageReset;
     }
 
     /**

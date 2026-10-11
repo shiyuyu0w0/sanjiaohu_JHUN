@@ -18,13 +18,8 @@ import java.io.IOException;
  *
  * ## 回退策略
  *
- * **每一次检索都会真的去请求一次桌面版**，成功就用它、失败才回退移动版。
- * 不做「失败后一段时间内不再尝试」的负缓存——那样一旦网络抖动误判，
- * 就会长时间锁死在移动版上，用户再也回不到桌面版。
- *
- * 「探测」只用来决定**要不要省掉这一次尝试**：
- * 它是一道额外的轻量请求，仅当上次尝试失败过才启用，并且失败后隔一小段时间就重新尝试，
- * 保证网络恢复后能自动切回桌面版。
+ * 桌面版失败后短暂使用移动版；90 秒后或网络变化时重新尝试桌面版。
+ * 两条线路的结果数量和排序不同，切换线路时必须重新读取第一页。
  */
 final class LibraryRoutes {
     private LibraryRoutes(){}
@@ -132,14 +127,24 @@ final class LibraryRoutes {
 
     /**
      * 检索。优先桌面版；本次桌面版失败才回退移动版。
-     * 每次调用都会重新尝试桌面版，网络恢复后能自动切回。
+     * 网络变化或短暂免打扰期结束后，重新尝试桌面版。
      */
     static LibraryApi.Page search(String keyword,String type,int page)throws IOException{
-        if(MOB.equals(forced))return useMob(keyword,type,page);
+        return search(keyword,type,page,null);
+    }
+
+    interface Search { LibraryApi.Page search(String keyword,String type,int page)throws IOException; }
+
+    static LibraryApi.Page search(String keyword,String type,int page,String previousRoute)throws IOException{
+        return search(keyword,type,page,previousRoute,LibraryOpacApi::search,LibraryApi::search);
+    }
+
+    static LibraryApi.Page search(String keyword,String type,int page,String previousRoute,Search opac,Search mobile)throws IOException{
+        if(MOB.equals(forced))return useMob(keyword,type,page,previousRoute,mobile);
 
         if(OPAC.equals(forced)||shouldTryOpac()){
             try{
-                LibraryApi.Page result=LibraryOpacApi.search(keyword,type,page);
+                LibraryApi.Page result=query(opac,OPAC,keyword,type,page,previousRoute);
                 noteSuccess();
                 lastRoute=OPAC;
                 return result;
@@ -147,16 +152,28 @@ final class LibraryRoutes {
                 throw cancelled;
             }catch(IOException opacError){
                 // 桌面版这次失败：记下时间，本次立即回退移动版。
-                // 不做长期负缓存——下次检索仍会重试桌面版。
+                // 网络变化或免打扰期结束后再重试桌面版。
                 noteFailure();
             }
         }
-        return useMob(keyword,type,page);
+        return useMob(keyword,type,page,previousRoute,mobile);
     }
 
-    private static LibraryApi.Page useMob(String keyword,String type,int page)throws IOException{
-        LibraryApi.Page result=LibraryApi.search(keyword,type,page);
+    private static LibraryApi.Page useMob(String keyword,String type,int page,String previousRoute,Search source)throws IOException{
+        LibraryApi.Page result=query(source,MOB,keyword,type,page,previousRoute);
         lastRoute=MOB;
+        return result;
+    }
+
+    private static LibraryApi.Page query(Search source,String route,String keyword,String type,int requested,String previousRoute)throws IOException{
+        int page=LibraryPaging.forRoute(previousRoute,route,requested);
+        LibraryApi.Page result=source.search(keyword,type,page);
+        // A catalogue may shrink even without a route change. Do not relabel repeated
+        // last-page data as another page; request a real first page instead.
+        if(result.page>Math.max(1,result.pages))result=source.search(keyword,type,1);
+        if(result.page<1||result.page>Math.max(1,result.pages))throw new IOException("图书馆分页信息异常，请重新检索");
+        result.route=route;
+        result.pageReset=requested>1&&result.page==1;
         return result;
     }
 
