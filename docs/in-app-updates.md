@@ -2,7 +2,7 @@
 
 ## 更新功能
 
-当前客户端版本为 **1.1.3（versionCode 46）**。入口是「个人 → 关于」中版本号左侧的「检查更新」小按钮。点击直接检查，没有独立更新页面；无可用更新时只显示简短提示，有新版本时弹出下载及安装提示，跟随应用主题及深色模式。
+当前客户端版本为 **1.1.8（versionCode 51）**。入口是「个人 → 关于」中版本号左侧的「检查更新」小按钮。点击直接检查，没有独立更新页面；无可用更新时只显示简短提示，有新版本时弹出下载及安装提示，跟随应用主题及深色模式。
 
 - 手动检查立即执行；进入前台距上次成功检查超过 24 小时才自动检查。失败后的自动尝试至少间隔 15 分钟，手动检查不受此限制。
 - 自动发现新版本，在个人页关于入口和关于页显示标记，不弹窗打断使用。
@@ -83,22 +83,22 @@ https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.3/Sanjiaohu-
 
 ## 以后每次发布
 
-以 1.1.4 为例：
+以 1.1.8 为例：
 
-1. 同时更新 `app/build.gradle` 和 `app/src/main/AndroidManifest.xml`：`versionName` 改成 1.1.4，`versionCode` 改成 47。实际值要高于所有已发布版本，不能只改显示名称。
+1. 同时更新 `app/build.gradle` 和 `app/src/main/AndroidManifest.xml`：`versionName` 改成 1.1.8，`versionCode` 改成 51。实际值要高于所有已发布版本，不能只改显示名称。
 2. 更新关于页说明、相应测试的版本预期，以及两个构建/重签名脚本的默认输出文件名。
 3. 新建更新说明文本，每行一条，不需要自己写圆点或 JSON。
-4. 使用原签名密钥构建最终 APK；上传 `v1.1.4` Release，附件名必须为 `Sanjiaohu-1.1.4.apk`。
+4. 使用原签名密钥构建最终 APK；上传 `v1.1.8` Release，附件名必须为 `Sanjiaohu-1.1.8.apk`。
 5. 从当前线上修订号继续递增，运行：
 
 ```powershell
 ./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.4.apk `
+  -Apk ./Sanjiaohu-1.1.8.apk `
   -ManifestRevision 8 `
-  -NotesFile ./updates/release-notes-1.1.4.txt `
+  -NotesFile ./updates/release-notes-1.1.8.txt `
   -Enable
 
-./scripts/verify-update.ps1 -Apk ./Sanjiaohu-1.1.4.apk
+./scripts/verify-update.ps1 -Apk ./Sanjiaohu-1.1.8.apk
 ```
 
 6. 提交并推送清单到 `main`。在已安装 1.1.3 的手机上检查更新、下载、确认安装，核对升级后版本及课表等本地数据。
@@ -111,9 +111,9 @@ https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.3/Sanjiaohu-
 
 ```powershell
 ./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.4.apk `
+  -Apk ./Sanjiaohu-1.1.8.apk `
   -ManifestRevision 9 `
-  -NotesFile ./updates/release-notes-1.1.4.txt
+  -NotesFile ./updates/release-notes-1.1.8.txt
 ```
 
 省略 `-Enable` 即关闭。客户端下一次取得新清单后停止推荐并取消不再适用的下载。缓存与离线设备可能暂时看不到撤回，因此不能保证即时撤回，也不能降级已经安装新版的手机。

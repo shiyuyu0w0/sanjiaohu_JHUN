@@ -6,5 +6,9 @@
         <domain includeSubdomains="false">ehall.jhun.edu.cn</domain>
         <domain includeSubdomains="false">hqfw.jhun.edu.cn</domain>
         <domain includeSubdomains="false">wlxpk.jhun.edu.cn</domain>
+        <!-- 图书馆只提供 HTTP 而未提供 HTTPS，故单独放行这两个域名：
+             opac 是桌面版（优先线路），mob 是移动版（备用线路）。 -->
+        <domain includeSubdomains="false">mob.lib.jhun.edu.cn</domain>
+        <domain includeSubdomains="false">opac.lib.jhun.edu.cn</domain>
     </domain-config>
 </network-security-config>
