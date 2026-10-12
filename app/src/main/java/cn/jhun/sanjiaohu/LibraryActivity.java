@@ -68,9 +68,11 @@ public final class LibraryActivity extends Activity {
         header.addView(action("‹","返回",()->finish()),new LinearLayout.LayoutParams(dp(44),dp(44)));
         LinearLayout titles=column();titles.setPadding(dp(14),0,dp(8),0);
         TextView title=text("图书馆查询",21,theme.text,true);titles.addView(title);
-        // The page subtitle describes the service rather than its internal route.
-        subtitle=text("江汉大学图书馆 · 馆藏与位置",12,theme.muted,false);
+        // Subtitle names the service and, since routes differ in result count and
+        // reachability, which line the results came from.
+        subtitle=text("",12,theme.muted,false);
         titles.addView(subtitle);
+        updateRouteHint();
         header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
         root.addView(header);
 
@@ -238,6 +240,8 @@ public final class LibraryActivity extends Activity {
                     setBusy(false);
                     status.setText(items.isEmpty()?"查询失败":"加载失败 · 仍显示「"+lastKeyword+"」第 "+page+" 页");
                     updatePager(!items.isEmpty());
+                    // 失败可能已经把线路降级到副线路，指示要跟着变
+                    updateRouteHint();
                     if(items.isEmpty())showEmpty(failureHint(error));else toast(failureHint(error));
                 });
             }
@@ -258,6 +262,7 @@ public final class LibraryActivity extends Activity {
         this.total=page.total;
 
         items.clear();items.addAll(page.items);
+        updateRouteHint();
         if(items.isEmpty()){
             status.setText("共 0 条结果");
             updatePager(false);
@@ -277,7 +282,6 @@ public final class LibraryActivity extends Activity {
             return;
         }
         status.setText("共 "+page.total+" 条 · 第 "+page.page+"/"+page.pages+" 页 · 点开可看馆藏位置");
-        updateRouteHint();
         countRows.clear();
         for(int i=0;i<page.items.size();i++)addCard(page.items.get(i),(page.page-1)*LibraryApi.PAGE_SIZE+i+1);
         startCountFill(page.items);
@@ -310,8 +314,20 @@ public final class LibraryActivity extends Activity {
         });
     }
 
+    /**
+     * 刷新主/副线路指示。
+     *
+     * 结果数量与排序**因线路而异**，所以用户看到结果时理应知道它来自哪条线路。
+     * 界面只标「主线路/副线路」，线路名与降级原因由 {@link #status} 行承担。
+     */
     void updateRouteHint(){
-        subtitle.setText("江汉大学图书馆 · 馆藏与位置");
+        if(subtitle==null)return;
+        subtitle.setText(routeSubtitle(LibraryRoutes.routeIndicator()));
+    }
+
+    /** 副标题的完整文本。纯函数，便于无设备时回归。 */
+    static String routeSubtitle(String indicator){
+        return "江汉大学图书馆 · 馆藏与位置　|　"+indicator;
     }
 
     String failureHint(IOException error){
@@ -393,6 +409,8 @@ public final class LibraryActivity extends Activity {
                     detailBox.setVisibility(View.VISIBLE);
                     trigger.setText("收起馆藏明细");trigger.setEnabled(true);
                     counts.setText("可借 "+detail.available+" / "+detail.totalCopies()+" 册");
+                    // 详情可能换了线路（桌面版解析不出馆藏时回退移动版）
+                    updateRouteHint();
                 });
             }catch(IOException error){
                 if(token!=generation)return;
