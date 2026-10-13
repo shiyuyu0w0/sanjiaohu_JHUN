@@ -202,6 +202,45 @@ public final class LibraryQueryTest {
         check(LibraryNetwork.onWifi()==false);
 
         LibraryRoutes.reset();
+        routeIndicator();
+    }
+
+    /**
+     * 主/副线路指示。只标线路等级，不解释线路名与降级原因。
+     */
+    static void routeIndicator(){
+        // 主线路：只显示「主线路」
+        check(LibraryRoutes.routeIndicator(LibraryRoutes.OPAC),"主线路");
+
+        // 副线路：只显示「副线路」
+        check(LibraryRoutes.routeIndicator(LibraryRoutes.MOB),"副线路");
+
+        // 两条线路的指示必须可区分，否则界面无从判断走的是哪条
+        check(!LibraryRoutes.routeIndicator(LibraryRoutes.OPAC)
+            .equals(LibraryRoutes.routeIndicator(LibraryRoutes.MOB)));
+
+        // 指示不得夹带线路名或降级措辞——这些由 status 行承担
+        String primary=LibraryRoutes.routeIndicator(LibraryRoutes.OPAC);
+        String secondary=LibraryRoutes.routeIndicator(LibraryRoutes.MOB);
+        for(String text:new String[]{primary,secondary}){
+            check(!text.contains("馆藏系统"));
+            check(!text.contains("移动版"));
+            check(!text.contains("暂不可用"));
+            check(!text.contains("校园网"));
+        }
+
+        // 未知线路名按主线路处理，实现里靠 isPrimary 的「非 MOB 即主」判定
+        check(LibraryRoutes.isPrimary(LibraryRoutes.OPAC));
+        check(LibraryRoutes.isPrimary(LibraryRoutes.MOB)==false);
+        check(LibraryRoutes.isPrimary("别的线路"));
+
+        // 无参重载读内部状态：复位后应显示主线路
+        check(LibraryRoutes.routeIndicator(),"主线路");
+
+        // 副标题：服务名 + 线路指示，且必须含指示文本
+        String subtitle=LibraryActivity.routeSubtitle(LibraryRoutes.routeIndicator());
+        check(subtitle.contains("江汉大学图书馆"));
+        check(subtitle.contains("主线路"));
     }
 
     /* ---------------------------------------------------------------- */

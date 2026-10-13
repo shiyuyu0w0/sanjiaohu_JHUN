@@ -28,6 +28,11 @@ final class LibraryRoutes {
     static final String OPAC="馆藏系统";
     static final String MOB="移动版";
 
+    /** 主线路（桌面版）的界面称谓。 */
+    static final String PRIMARY_LABEL="主线路";
+    /** 副线路（移动版）的界面称谓。 */
+    static final String SECONDARY_LABEL="副线路";
+
     /**
      * 上次桌面版尝试失败的时间。0 表示没有失败记录。
      */
@@ -113,6 +118,27 @@ final class LibraryRoutes {
     /** 当前是否处于「桌面版暂不可用、已回退移动版」的状态——用于界面提示。 */
     static boolean degraded(){
         return lastFailureAt!=0&&!shouldTryOpac();
+    }
+
+    /** 某条线路是主线路（桌面版）还是副线路（移动版）。 */
+    static boolean isPrimary(String route){
+        return !MOB.equals(route);
+    }
+
+    /**
+     * 副标题上的主/副线路指示。只标线路等级，不解释线路名与服务状态。
+     *
+     * 形如「主线路」或「副线路」。纯函数（不读内部状态），便于无设备时回归。
+     *
+     * @param route 最近一次实际使用的线路
+     */
+    static String routeIndicator(String route){
+        return isPrimary(route)?PRIMARY_LABEL:SECONDARY_LABEL;
+    }
+
+    /** 当前线路的指示文本。 */
+    static String routeIndicator(){
+        return routeIndicator(lastRoute);
     }
 
     /**
