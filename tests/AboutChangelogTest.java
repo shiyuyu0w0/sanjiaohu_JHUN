@@ -32,7 +32,7 @@ public final class AboutChangelogTest {
             check(!entry[1].contains("`")&&!entry[1].contains("**"),"plain text in "+entry[0]);
         }
         if(updates.length>=9){
-            check(updates[0][1].contains("图书馆")&&updates[0][1].contains("馆藏"),"v1.1.8 records the library query");
+            check(updates[0][1].contains("图书查询")&&updates[0][1].contains("馆藏"),"v1.1.8 records the book query");
             check(updates[1][1].contains("扫码")&&updates[1][1].contains("缴费订单"),"v1.1.7 records QR login and order history");
             check(updates[2][1].contains("Gitee")&&updates[2][1].contains("登录失败")&&updates[2][1].contains("实验报告"),"v1.1.6 records download, login and report changes");
             check(updates[3][1].contains("北区18舍")&&updates[3][1].contains("电表"),"v1.1.5 records dorm meter fixes");

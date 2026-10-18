@@ -1,29 +1,32 @@
 {
   "schemaVersion": 1,
-  "manifestRevision": 11,
-  "enabled": false,
+  "manifestRevision": 12,
+  "enabled": true,
   "channel": "stable",
   "packageName": "cn.jhun.sanjiaohu",
-  "versionCode": 50,
-  "versionName": "1.1.7",
+  "versionCode": 51,
+  "versionName": "1.1.8",
   "minSdk": 26,
   "releaseNotes": [
-    "新增教务系统扫码登录，可选择将有效会话加密保存在本机。",
-    "扫码会话失效时给出提醒，并建议使用密码登录。",
-    "电费页新增历史缴费订单，可查看金额、房间、时间和处理进度。",
-    "统一重绘应用内图标，优化刷新、导航、菜单与深色模式下的显示。"
+    "新增图书查询，可检索馆藏并查看索书号、可借册数与所在楼层库室",
+    "馆藏明细按需加载，展开某本书时才读取条码、状态与还书位置",
+    "馆藏地未标注库室时，按中图法分类号推测位置并明确标注为推测",
+    "查询结果支持上一页、下一页翻页",
+    "优化图书查询界面，修复不可借状态误判及切换查询线路时的分页异常",
+    "区分搜索结果与馆藏详情的主、副线路来源",
+    "新增课程备注，支持添加、编辑和清空，刷新课表后仍保留"
   ],
-  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.1.7",
+  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.1.8",
   "apk": {
-    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.7/Sanjiaohu-1.1.7.apk",
-    "gitee": "https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.7/Sanjiaohu-1.1.7.apk",
-    "sizeBytes": 2584771,
-    "sha256": "5329ba27cb80e6a9eec9114d6b4d3d4905a8a4609352a1805e9c409697bf9da8",
+    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.8/Sanjiaohu-1.1.8.apk",
+    "gitee": "https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.8/Sanjiaohu-1.1.8.apk",
+    "sizeBytes": 2617613,
+    "sha256": "ad00ef385d1840c29a2168118a31afbd965c4da3bfd33eb95d44683e417ba654",
     "mirrors": [
       {
         "id": "ghproxy",
         "name": "Accelerated",
-        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.7/Sanjiaohu-1.1.7.apk"
+        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.8/Sanjiaohu-1.1.8.apk"
       }
     ]
   }

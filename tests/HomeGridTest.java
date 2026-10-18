@@ -90,7 +90,7 @@ public final class HomeGridTest {
         int[][] odd=layout(9);
         check(odd.length==5);
         check(odd[4].length==2);                         // 第 5 行仍是两个格子
-        check(odd[4][0]==8);                             // 图书馆查询在第 1 格
+        check(odd[4][0]==8);                             // 图书查询在第 1 格
         check(odd[4][1]==PLACEHOLDER);                   // 第 2 格是占位
         check(odd[0].length==2&&odd[0][0]==0&&odd[0][1]==1);   // 第 1 行两个入口
 
@@ -110,7 +110,7 @@ public final class HomeGridTest {
 
         // 图书馆入口必须存在且与图标对应
         int library=-1;
-        for(int i=0;i<titles.length;i++)if("图书馆查询".equals(titles[i]))library=i;
+        for(int i=0;i<titles.length;i++)if("图书查询".equals(titles[i]))library=i;
         check(library>=0);
         check(icons[library]==23);                       // 23 = ic_ui_book
 

@@ -78,7 +78,7 @@
 | 构建 | Gradle、Android Gradle Plugin 8.13.0 |
 | 界面 | Android 原生 View、自定义 View 与 Drawable |
 | 校园系统接入 | WebView、JavaScript 页面适配、原生网络请求 |
-| 图书馆查询 | 汇文 libsys 移动版 OPAC 只读抓取，正则解析 HTML |
+| 图书查询 | 汇文 libsys 移动版 OPAC 只读抓取，正则解析 HTML |
 | 本地存储 | JSON、SharedPreferences、AtomicFile、应用私有目录 |
 | 凭证保护 | Android Keystore、AES-256-GCM |
 | 日期时间 | `java.time` |

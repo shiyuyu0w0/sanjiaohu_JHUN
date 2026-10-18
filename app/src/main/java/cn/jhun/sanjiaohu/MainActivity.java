@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
     float wallpaperAspect=.65f;
     final Schedule localSchedule=Schedule.local();
     CustomCourseStore customStore;
+    CourseNoteStore courseNoteStore;
     List<Course> localCourses=new ArrayList<>();
     boolean customReadError=false,todayLabel=false,verified=false,autoTried=false,autoSubmitted=false,autoRunning=false,credentialBusy=false;
     boolean teachingSessionReady=false,teachingSessionRestoring=false;
@@ -87,6 +88,7 @@ public class MainActivity extends Activity {
         super.onCreate(saved);
         prefs=getSharedPreferences("settings",MODE_PRIVATE);
         customStore=new CustomCourseStore(this);
+        courseNoteStore=new CourseNoteStore(this);
         try{localCourses=customStore.load();}catch(Exception e){customReadError=true;}
         if(saved!=null){page=saved.getInt("page",0);todayLabel=saved.getBoolean("todayLabel",false);wallpaperAspect=saved.getFloat("wallpaperAspect",.65f);}
         refreshAppearance();
@@ -590,7 +592,7 @@ public class MainActivity extends Activity {
     LinearLayout panel(){LinearLayout p=column();p.setPadding(dp(20),dp(20),dp(20),dp(20));p.setBackground(shape(palette.panel,22));return p;}
     void space(LinearLayout parent,int size){parent.addView(new View(this),new LinearLayout.LayoutParams(1,dp(size)));}
     /** 首页「常用入口」的四张表，必须等长；网格按每行两个排布。 */
-    static final String[] HOME_TITLES={"考试查询","自定义课程","成绩查看","校园地图","校历","网上报修","电费","大物实验报告","图书馆查询"};
+    static final String[] HOME_TITLES={"考试查询","自定义课程","成绩查看","校园地图","校历","网上报修","电费","大物实验报告","图书查询"};
     static final String[] HOME_SUBTITLES={"考试安排 · 倒计时","添加与管理","按学期查看","探索校园","2026—2027 学年","校园后勤服务","电量查询 · 在线缴费","需连接校园网","馆藏 · 楼层库室"};
     static final int[] HOME_ICONS={19,8,11,13,14,15,17,18,23};
     View homeView(){

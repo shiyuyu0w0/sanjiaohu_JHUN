@@ -362,7 +362,7 @@ final class LibraryApi {
 
     /** 一本书的详情。 */
     static final class Detail {
-        String title="",author="",publisher="",isbn="",callNoClass="",subject="",summary="";
+        String title="",author="",publisher="",isbn="",callNoClass="",subject="",summary="",route="";
         int price=-1;
         List<Holding> holdings=new ArrayList<>();
         int available;

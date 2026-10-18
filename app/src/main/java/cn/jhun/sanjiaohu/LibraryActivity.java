@@ -24,7 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 图书馆查询：检索江汉大学图书馆馆藏，并给出每本书的楼层与库室。
+ * 图书查询：检索江汉大学图书馆馆藏，并给出每本书的楼层与库室。
  *
  * 列表默认不拉馆藏——先给题名/作者/索书号/可借总藏，以及**按索书号推测的位置**；
  * 需要精确的条码/状态/库室时再单本展开（一次请求约 0.15 秒）。
@@ -67,7 +67,7 @@ public final class LibraryActivity extends Activity {
         LinearLayout header=row();header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(18),dp(10),dp(18),dp(10));
         header.addView(action("‹","返回",()->finish()),new LinearLayout.LayoutParams(dp(44),dp(44)));
         LinearLayout titles=column();titles.setPadding(dp(14),0,dp(8),0);
-        TextView title=text("图书馆查询",21,theme.text,true);titles.addView(title);
+        TextView title=text("图书查询",21,theme.text,true);titles.addView(title);
         // Subtitle names the service and, since routes differ in result count and
         // reachability, which line the results came from.
         subtitle=text("",12,theme.muted,false);
@@ -188,7 +188,7 @@ public final class LibraryActivity extends Activity {
                 dialog.dismiss();
                 if(entry[0].equals(searchType))return;
                 searchType=entry[0];updateTypePicker();
-                generation++;items.clear();countRows.clear();lastKeyword="";lastType="";lastRoute="";
+                generation++;items.clear();countRows.clear();lastKeyword="";lastType="";lastRoute="";updateRouteHint();
                 page=pages=1;total=0;updatePager(false);
                 showEmpty("输入关键词，按"+entry[1]+"查询馆藏");
                 if(!keyword.getText().toString().trim().isEmpty())runSearch(1);
@@ -240,7 +240,7 @@ public final class LibraryActivity extends Activity {
                     setBusy(false);
                     status.setText(items.isEmpty()?"查询失败":"加载失败 · 仍显示「"+lastKeyword+"」第 "+page+" 页");
                     updatePager(!items.isEmpty());
-                    // 失败可能已经把线路降级到副线路，指示要跟着变
+                    // 请求失败时保留当前列表的来源。
                     updateRouteHint();
                     if(items.isEmpty())showEmpty(failureHint(error));else toast(failureHint(error));
                 });
@@ -315,19 +315,16 @@ public final class LibraryActivity extends Activity {
     }
 
     /**
-     * 刷新主/副线路指示。
-     *
-     * 结果数量与排序**因线路而异**，所以用户看到结果时理应知道它来自哪条线路。
-     * 界面只标「主线路/副线路」，线路名与降级原因由 {@link #status} 行承担。
+     * 顶部只表示当前搜索结果的来源；单本详情的回退来源在详情中标注。
      */
     void updateRouteHint(){
         if(subtitle==null)return;
-        subtitle.setText(routeSubtitle(LibraryRoutes.routeIndicator()));
+        subtitle.setText(routeSubtitle(lastRoute.isEmpty()?"":LibraryRoutes.routeIndicator(lastRoute)));
     }
 
     /** 副标题的完整文本。纯函数，便于无设备时回归。 */
     static String routeSubtitle(String indicator){
-        return "江汉大学图书馆 · 馆藏与位置　|　"+indicator;
+        return indicator.isEmpty()?"江汉大学图书馆 · 馆藏与位置":"江汉大学图书馆 · 搜索："+indicator;
     }
 
     String failureHint(IOException error){
@@ -395,10 +392,11 @@ public final class LibraryActivity extends Activity {
     void loadDetail(final LibraryApi.Item item,final TextView counts,final LinearLayout detailBox,final TextView trigger){
         if(busy){toast("正在查询，请稍候");return;}
         final int token=generation;
+        final String searchRoute=lastRoute;
         trigger.setText("正在读取馆藏…");trigger.setEnabled(false);
         work.execute(()->{
             try{
-                final LibraryApi.Detail detail=LibraryRoutes.detail(item);
+                final LibraryApi.Detail detail=LibraryRoutes.detail(item,searchRoute);
                 if(token!=generation)return;
                 runOnUiThread(()->{
                     if(token!=generation||isDestroyed())return;
@@ -409,8 +407,6 @@ public final class LibraryActivity extends Activity {
                     detailBox.setVisibility(View.VISIBLE);
                     trigger.setText("收起馆藏明细");trigger.setEnabled(true);
                     counts.setText("可借 "+detail.available+" / "+detail.totalCopies()+" 册");
-                    // 详情可能换了线路（桌面版解析不出馆藏时回退移动版）
-                    updateRouteHint();
                 });
             }catch(IOException error){
                 if(token!=generation)return;
@@ -429,6 +425,9 @@ public final class LibraryActivity extends Activity {
     void fillDetail(LinearLayout box,LibraryApi.Detail detail){
         box.removeAllViews();
         box.addView(line("",1,theme.muted));
+        if(!detail.route.isEmpty()&&!detail.route.equals(lastRoute)){
+            box.addView(line("馆藏详情来源："+LibraryRoutes.routeIndicator(detail.route),12,theme.muted));
+        }
 
         LibraryLocation.Summary area=detail.area;
         // 实际馆藏地优先——有具体库室时不再使用推测

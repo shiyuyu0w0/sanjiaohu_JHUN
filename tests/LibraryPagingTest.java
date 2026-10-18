@@ -45,6 +45,67 @@ public final class LibraryPagingTest {
             throw new AssertionError("Cancellation must propagate");
         }catch(LibraryApi.Cancelled expected){check(mobileCalls.isEmpty());}
         LibraryRoutes.reset();
+        detailRoutes();
         System.out.println("PASS: "+checks+" library query, route and paging regressions");
+    }
+
+    static LibraryApi.Detail detail(String marker){
+        LibraryApi.Detail detail=new LibraryApi.Detail();detail.title=marker;
+        detail.holdings.add(new LibraryApi.Holding());return detail;
+    }
+
+    /** Exercise real fallback decisions without relying on a live library server. */
+    static void detailRoutes()throws Exception{
+        List<String> calls=new ArrayList<>();
+        LibraryRoutes.DetailSource primary=target->{calls.add("primary");return detail("primary data");};
+        LibraryRoutes.DetailSource secondary=target->{calls.add("secondary");return detail("secondary data");};
+        LibraryRoutes.DetailSource empty=target->{calls.add("primary empty");return new LibraryApi.Detail();};
+        LibraryRoutes.DetailSource offline=target->{calls.add("primary offline");throw new IOException("offline");};
+        LibraryRoutes.reset();
+        LibraryApi.Detail direct=LibraryRoutes.detail("book",LibraryRoutes.OPAC,primary,secondary);
+        check(direct.route.equals(LibraryRoutes.OPAC)&&direct.title.equals("primary data"));
+        check(calls.equals(Arrays.asList("primary")));
+
+        // An empty primary detail falls back, while the search list keeps its own source.
+        calls.clear();
+        LibraryApi.Detail fallback=LibraryRoutes.detail("book",LibraryRoutes.OPAC,empty,secondary);
+        check(calls.equals(Arrays.asList("primary empty","secondary")));
+        check(fallback.route.equals(LibraryRoutes.MOB)&&fallback.title.equals("secondary data"));
+        check(LibraryRoutes.lastRoute().equals(LibraryRoutes.OPAC));
+        check(LibraryActivity.routeSubtitle(LibraryRoutes.routeIndicator(LibraryRoutes.lastRoute())).contains("搜索：主线路"));
+
+        // A network failure has the same source tracking, including during the quiet period.
+        calls.clear();
+        LibraryApi.Detail failedOver=LibraryRoutes.detail("book",LibraryRoutes.OPAC,offline,secondary);
+        check(calls.equals(Arrays.asList("primary offline","secondary")));
+        check(failedOver.route.equals(LibraryRoutes.MOB));
+        check(LibraryRoutes.lastRoute().equals(LibraryRoutes.OPAC));
+        calls.clear();
+        LibraryApi.Detail quiet=LibraryRoutes.detail("book",LibraryRoutes.OPAC,primary,secondary);
+        check(calls.equals(Arrays.asList("secondary"))&&quiet.route.equals(LibraryRoutes.MOB));
+
+        // Use the passed-in page source, even if another search changed global state.
+        LibraryRoutes.force(LibraryRoutes.OPAC);calls.clear();
+        LibraryApi.Detail mobile=LibraryRoutes.detail("book",LibraryRoutes.MOB,primary,secondary);
+        check(calls.equals(Arrays.asList("secondary"))&&mobile.route.equals(LibraryRoutes.MOB));
+
+        calls.clear();
+        try{
+            LibraryRoutes.detail("book",LibraryRoutes.OPAC,target->{throw new LibraryApi.Cancelled();},secondary);
+            throw new AssertionError("Primary detail cancellation must propagate");
+        }catch(LibraryApi.Cancelled expected){check(calls.isEmpty());}
+        try{
+            LibraryRoutes.detail("book",LibraryRoutes.OPAC,empty,target->{throw new LibraryApi.Cancelled();});
+            throw new AssertionError("Fallback detail cancellation must propagate");
+        }catch(LibraryApi.Cancelled expected){check(true);}
+
+        IOException unavailable=new IOException("secondary offline");
+        try{
+            LibraryRoutes.detail("book",LibraryRoutes.OPAC,offline,target->{throw unavailable;});
+            throw new AssertionError("A failed fallback must not return a detail source");
+        }catch(IOException expected){check(expected.getCause()==unavailable);}
+        check(LibraryRoutes.lastRoute().equals(LibraryRoutes.OPAC));
+        check(LibraryActivity.routeSubtitle("").equals("江汉大学图书馆 · 馆藏与位置"));
+        LibraryRoutes.reset();
     }
 }

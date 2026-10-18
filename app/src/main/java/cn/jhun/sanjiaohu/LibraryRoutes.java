@@ -59,7 +59,7 @@ final class LibraryRoutes {
     /** 测试用：固定线路。null = 自动选择。 */
     private static String forced;
 
-    /** 最近一次实际使用的线路，供界面显示。 */
+    /** 最近一次成功搜索的线路；详情回退不改变搜索结果的来源。 */
     static String lastRoute(){return lastRoute;}
 
     /**
@@ -255,15 +255,25 @@ final class LibraryRoutes {
         pool.shutdown();
     }
 
-    /** 取馆藏明细。与检索走同一条线路，避免同一次操作里两条线路混用。
-     *  当前线路的详情失败时，回退另一条线路再试一次。 */
+    /** 取馆藏明细，记录实际来源，但保留搜索线路及其分页状态。 */
     static LibraryApi.Detail detail(Object target)throws IOException{
-        boolean preferOpac=OPAC.equals(lastRoute)&&(OPAC.equals(forced)||shouldTryOpac());
+        return detail(target,lastRoute);
+    }
+
+    interface DetailSource { LibraryApi.Detail detail(Object target)throws IOException; }
+
+    static LibraryApi.Detail detail(Object target,String searchRoute)throws IOException{
+        return detail(target,searchRoute,LibraryOpacApi::detail,LibraryApi::detail);
+    }
+
+    static LibraryApi.Detail detail(Object target,String searchRoute,DetailSource opac,DetailSource mobile)throws IOException{
+        boolean preferOpac=OPAC.equals(searchRoute)&&(OPAC.equals(forced)||shouldTryOpac());
         if(preferOpac){
             try{
-                LibraryApi.Detail detail=LibraryOpacApi.detail(target);
+                LibraryApi.Detail detail=opac.detail(target);
                 if(!detail.holdings.isEmpty()){
                     noteSuccess();
+                    detail.route=OPAC;
                     return detail;
                 }
                 // 桌面版没解析出馆藏：该 marc_no 可能只在移动版有明细，换一条再试
@@ -273,11 +283,19 @@ final class LibraryRoutes {
                 noteFailure();
             }
             try{
-                return LibraryApi.detail(target);
+                return mobileDetail(target,mobile);
+            }catch(LibraryApi.Cancelled cancelled){
+                throw cancelled;
             }catch(IOException mobError){
-                throw new IOException("馆藏明细读取失败，请稍后重试");
+                throw new IOException("馆藏明细读取失败，请稍后重试",mobError);
             }
         }
-        return LibraryApi.detail(target);
+        return mobileDetail(target,mobile);
+    }
+
+    private static LibraryApi.Detail mobileDetail(Object target,DetailSource source)throws IOException{
+        LibraryApi.Detail detail=source.detail(target);
+        detail.route=MOB;
+        return detail;
     }
 }
