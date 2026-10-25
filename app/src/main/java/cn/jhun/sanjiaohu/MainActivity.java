@@ -79,6 +79,7 @@ public class MainActivity extends Activity {
     final List<String> terms=new ArrayList<>();
     String state="尚未同步 · 登录后，课表会保存在这台手机";
     boolean busy=false, inBackground=false, loadError=false, mainLoaded=false, identityBusy=false;
+    boolean authServiceUnavailable=false;
     int selectedWeek=1, generation=0;
     long deadline;
     Handler handler=new Handler(Looper.getMainLooper());
@@ -87,6 +88,8 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
         prefs=getSharedPreferences("settings",MODE_PRIVATE);
+        // Older builds persisted an undifferentiated block even for a server outage.
+        if(prefs.getBoolean("autoBlocked",false)&&!TeachingLoginPolicy.hasManualReason(prefs.getString("autoBlockReason","")))prefs.edit().putBoolean("autoBlocked",false).remove("autoBlockReason").apply();
         customStore=new CustomCourseStore(this);
         courseNoteStore=new CourseNoteStore(this);
         try{localCourses=customStore.load();}catch(Exception e){customReadError=true;}
@@ -142,7 +145,7 @@ public class MainActivity extends Activity {
         web.getSettings().setLoadWithOverviewMode(true);web.getSettings().setUseWideViewPort(true);
         web.getSettings().setBuiltInZoomControls(true);web.getSettings().setDisplayZoomControls(false);
         CookieManager.getInstance().setAcceptCookie(true);
-        web.setWebChromeClient(new WebChromeClient(){@Override public boolean onJsAlert(WebView v,String url,String message,JsResult result){result.confirm();if(autoRunning)authAttention("自动登录未完成 · 请到个人页验证账号");return true;}});
+        web.setWebChromeClient(new WebChromeClient(){@Override public boolean onJsAlert(WebView v,String url,String message,JsResult result){result.confirm();if(autoRunning&&busy&&sourceOrigin(url))handleLoginMessage(message);return true;}});
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){mainLoaded=false;}
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){
@@ -150,9 +153,9 @@ public class MainActivity extends Activity {
                 if(r.isForMainFrame()){if(busy)fail("登录跳转不受支持 · 已保留本地课表");Toast.makeText(MainActivity.this,"仅允许打开学校 HTTPS 页面",Toast.LENGTH_LONG).show();}return true;
             }
             @Override public void onPageFinished(WebView v,String url){mainLoaded=true;CookieManager.getInstance().flush();}
-            @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame()){loadError=true;if(busy)fail("连接失败 · 已保留本地课表");}}
-            @Override public void onReceivedHttpError(WebView v,WebResourceRequest r,WebResourceResponse e){if(r.isForMainFrame()){loadError=true;if(busy)fail("教务服务异常 · 已保留本地课表");}}
-            @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){h.cancel();loadError=true;if(busy)fail("安全连接失败 · 已保留本地课表");}
+            @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame()){loadError=true;if(busy)authServiceFailure("教务连接失败 · 已保留本地课表，可稍后刷新重试");}}
+            @Override public void onReceivedHttpError(WebView v,WebResourceRequest r,WebResourceResponse e){if(r.isForMainFrame()){loadError=true;if(busy)authServiceFailure("教务服务暂不可用（"+e.getStatusCode()+"）· 已保留本地课表，可稍后刷新重试");}}
+            @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){h.cancel();loadError=true;if(busy)authServiceFailure("教务安全连接失败 · 已保留本地课表，可稍后刷新重试");}
         });attachHidden();
     }
     void attachHidden(){if(web.getParent()!=null)((android.view.ViewGroup)web.getParent()).removeView(web);web.setAlpha(0);web.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);web.setFocusable(false);root.addView(web,0,new FrameLayout.LayoutParams(1,1));}
@@ -161,7 +164,7 @@ public class MainActivity extends Activity {
         if(!teachingSessionReady){restoreTeachingSession();return;}
         jobKind=page==4?"exams":page==3?(gradeSummarySheet!=null&&gradeSummarySheet.dialog.isShowing()&&summaryAll?"summary":"grades"):"schedule";jobTerm=jobKind.equals("exams")?examTerm:jobKind.equals("summary")?"入学以来":page==3?gradeTerm:selectedTerm;
         if(!prefs.getBoolean("loginCompleted",false)&&!canAutoLogin()){showLogin();return;}
-        autoTried=false;autoRunning=false;loadError=false;mainLoaded=false;startPoll();web.loadUrl(HOME);
+        autoTried=false;autoRunning=false;autoSubmitted=false;loadError=false;mainLoaded=false;startPoll();web.loadUrl(HOME);
     }
     boolean qrLogin(){return prefs.getString("teachingLoginMethod","password").equals("qr");}
     void restoreTeachingSession(){
@@ -212,25 +215,41 @@ public class MainActivity extends Activity {
         }
     }
     boolean canAutoLogin(){return !qrLogin()&&prefs.getBoolean("autoLogin",true)&&!prefs.getBoolean("autoBlocked",false)&&CredentialStore.exists(this);}
-    void authAttention(String message){boolean failedSubmission=autoRunning&&autoSubmitted;verified=false;automaticCredentials=null;autoRunning=false;autoSubmitted=false;prefs.edit().putBoolean("loginCompleted",false).putBoolean("autoBlocked",true).apply();authIo.execute(()->TeachingSessionStore.clear(this));fail(message);if(failedSubmission)showLoginFailureWarning();}
+    void authAttention(String message,TeachingLoginPolicy.Failure failure){
+        if(!failure.manual){authServiceFailure(message);return;}
+        boolean warn=autoRunning&&autoSubmitted&&failure.warning;verified=false;authServiceUnavailable=false;
+        prefs.edit().putBoolean("loginCompleted",false).putBoolean("autoBlocked",true).putString("autoBlockReason",failure.name()).apply();
+        if(failure==TeachingLoginPolicy.Failure.SESSION)authIo.execute(()->TeachingSessionStore.clear(this));
+        fail(message);if(warn)showLoginFailureWarning();
+    }
+    void authServiceFailure(String message){verified=false;authServiceUnavailable=true;fail(message);}
+    void handleLoginMessage(String message){
+        TeachingLoginPolicy.Failure failure=TeachingLoginPolicy.classify(message);
+        if(failure==TeachingLoginPolicy.Failure.CREDENTIALS&&autoSubmitted)authAttention("学校提示账号或密码有误 · 请到个人页核对后登录",failure);
+        else if(failure==TeachingLoginPolicy.Failure.LOCKED)authAttention("学校提示账号已锁定 · 请稍后到个人页重新登录",failure);
+        else if(failure==TeachingLoginPolicy.Failure.CAPTCHA)authAttention("学校要求验证码 · 请到个人页完成登录",failure);
+        else authServiceFailure("教务暂时无法完成登录 · 已保留本地课表，可稍后刷新重试");
+    }
     void showLoginFailureWarning(){if(loginFailureDialog==null||!loginFailureDialog.isShowing())loginFailureDialog=LoginFailureWarning.show(this,palette);}
     void showQrSessionExpiredWarning(){if(!inBackground&&(qrSessionExpiredDialog==null||!qrSessionExpiredDialog.isShowing()))qrSessionExpiredDialog=QrSessionExpiredWarning.show(this,palette,()->showLogin());}
-    void authenticated(){verified=true;prefs.edit().putBoolean("loginCompleted",true).putBoolean("autoBlocked",false).putLong("lastAuthAt",System.currentTimeMillis()).apply();
+    void authenticated(){verified=true;authServiceUnavailable=false;prefs.edit().putBoolean("loginCompleted",true).putBoolean("autoBlocked",false).remove("autoBlockReason").putLong("lastAuthAt",System.currentTimeMillis()).apply();
         if(qrLogin()&&prefs.getBoolean("autoLogin",false)){String snapshot=TeachingSessionStore.capture();if(snapshot!=null)authIo.execute(()->{try{TeachingSessionStore.save(this,snapshot);}catch(Exception ignored){}});}
     }
     void tryAutoLogin(int token){
         verified=false;
-        if(autoTried||!canAutoLogin()){boolean scanned=qrLogin();authAttention(scanned?"扫码会话已过期 · 建议使用密码登录，本地记录仍保留":"登录已过期 · 请到个人页登录，课表仍保留");if(scanned)showQrSessionExpiredWarning();return;}
+        if(qrLogin()){authAttention("扫码会话已过期 · 建议使用密码登录，本地记录仍保留",TeachingLoginPolicy.Failure.SESSION);showQrSessionExpiredWarning();return;}
+        if(autoTried){authServiceFailure("学校尚未确认登录状态 · 已保留本地课表，可稍后刷新重试");return;}
+        if(!canAutoLogin()){prefs.edit().putBoolean("loginCompleted",false).apply();fail("登录已过期 · 请到个人页登录，课表仍保留");return;}
         autoTried=true;autoRunning=true;autoSubmitted=false;setState("会话已过期 · 正在自动登录…");
         authIo.execute(()->{try{CredentialStore.Credentials credentials=CredentialStore.load(this);handler.post(()->{
             if(isDestroyed()||inBackground||token!=generation||!busy)return;
             automaticCredentials=credentials;autoSubmitted=false;mainLoaded=false;deadline=SystemClock.elapsedRealtime()+30000;
             web.loadUrl(LoginActivity.ENTRY);handler.postDelayed(()->pollLogin(token),600);
-        });}catch(Exception e){handler.post(()->{if(token==generation&&busy)authAttention("本机登录凭证无法读取 · 请到个人页重新登录");});}});
+        });}catch(Exception e){handler.post(()->{if(token==generation&&busy)authAttention("本机登录凭证无法读取 · 请到个人页重新登录",TeachingLoginPolicy.Failure.LOCAL);});}});
     }
     void pollLogin(int token){
         if(token!=generation||!busy||inBackground)return;
-        if(SystemClock.elapsedRealtime()>deadline){boolean failedSubmission=autoSubmitted;automaticCredentials=null;autoRunning=false;autoSubmitted=false;fail("自动登录超时 · 已保留本地课表");if(failedSubmission)showLoginFailureWarning();return;}
+        if(SystemClock.elapsedRealtime()>deadline){authServiceFailure("自动登录超时 · 已保留本地课表，可稍后刷新重试");return;}
         if(!mainLoaded||!sourceOrigin(web.getUrl())){handler.postDelayed(()->pollLogin(token),600);return;}
         web.evaluateJavascript(loginStateScript,result->{
             if(token!=generation||!busy||inBackground)return;
@@ -238,16 +257,17 @@ public class MainActivity extends Activity {
                 JSONObject data=new JSONObject(result);String kind=data.optString("state");
                 if(kind.equals("success")){automaticCredentials=null;autoRunning=false;authenticated();mainLoaded=false;deadline=SystemClock.elapsedRealtime()+(jobKind.equals("exams")?120000:45000);setState("自动登录成功 · 正在获取数据");web.loadUrl(HOME);handler.postDelayed(()->poll(token),600);return;}
                 if(kind.equals("ready")){
-                    if(data.optBoolean("captcha")){authAttention("学校要求验证码 · 请到个人页完成登录");return;}
+                    if(autoSubmitted&&!data.optString("message").isEmpty()){handleLoginMessage(data.optString("message"));return;}
+                    if(data.optBoolean("captcha")){authAttention("学校要求验证码 · 请到个人页完成登录",TeachingLoginPolicy.Failure.CAPTCHA);return;}
                     if(!autoSubmitted){
-                        if(automaticCredentials==null){authAttention("请到个人页重新保存登录凭证");return;}
+                        if(automaticCredentials==null){authAttention("请到个人页重新保存登录凭证",TeachingLoginPolicy.Failure.LOCAL);return;}
                         String call=loginSubmitScript.trim()+"("+JSONObject.quote(automaticCredentials.account)+","+JSONObject.quote(automaticCredentials.password)+",\"\")";
                         automaticCredentials=null;autoSubmitted=true;submittedAt=SystemClock.elapsedRealtime();
-                        web.evaluateJavascript(call,response->{if(token!=generation||!busy)return;try{if(new JSONObject(response).has("error"))authAttention("自动登录需要手动验证 · 请打开个人页");}catch(Exception e){authAttention("学校登录页面变化 · 请打开个人页重试");}});
-                    }else if(SystemClock.elapsedRealtime()-submittedAt>10000){authAttention("账号验证未通过 · 请到个人页检查登录信息");return;}
+                        web.evaluateJavascript(call,response->{if(token!=generation||!busy)return;try{JSONObject reply=new JSONObject(response);if(reply.has("error")){if(reply.optString("error").equals("captcha"))authAttention("学校要求验证码 · 请到个人页完成登录",TeachingLoginPolicy.Failure.CAPTCHA);else authServiceFailure("学校登录表单暂不可用 · 已保留本地课表，可稍后刷新重试");}}catch(Exception e){authServiceFailure("学校登录页面暂时无法读取 · 已保留本地课表，可稍后刷新重试");}});
+                    }else if(SystemClock.elapsedRealtime()-submittedAt>10000){authServiceFailure("学校尚未返回登录结果 · 已保留本地课表，可稍后刷新重试");return;}
                 }
                 handler.postDelayed(()->pollLogin(token),600);
-            }catch(Exception e){authAttention("学校登录页面暂时无法读取 · 请手动登录");}
+            }catch(Exception e){authServiceFailure("学校登录页面暂时无法读取 · 已保留本地课表，可稍后刷新重试");}
         });
     }
     void startPoll(){if(busy)return;busy=true;int token=++generation;deadline=android.os.SystemClock.elapsedRealtime()+(jobKind.equals("exams")?120000:45000);setState("正在更新"+(jobKind.equals("exams")?"考试安排":jobKind.equals("summary")?"汇总":jobKind.equals("grades")?"成绩":"课表")+" · 本地记录随时可看");handler.postDelayed(()->poll(token),600);}
@@ -293,7 +313,7 @@ public class MainActivity extends Activity {
         });
     }
     void setState(String s){if(jobKind.equals("exams"))examState=s.replace("本地课表","本地考试安排");else if(jobKind.equals("summary"))summaryState=s.replace("本地课表","本地汇总");else if(jobKind.equals("grades"))gradeState=s.replace("本地课表","本地成绩");else state=s;if(stateText!=null)stateText.setText(page==4?examState:page==3?gradeState:state);if(authStatusText!=null)authStatusText.setText(authStatus());refreshSummary();}
-    void fail(String reason){automaticCredentials=null;autoRunning=false;busy=false;generation++;if(jobKind.equals("exams")?exams==null:jobKind.equals("summary")?summaryGrades==null:jobKind.equals("grades")?grades==null:schedule==null)reason=reason.replace("已保留本地课表","暂无缓存，可稍后重试").replace("已保留上次记录","暂无缓存，可稍后重试");setState(reason);}
+    void fail(String reason){automaticCredentials=null;autoRunning=false;autoSubmitted=false;busy=false;generation++;if(jobKind.equals("exams")?exams==null:jobKind.equals("summary")?summaryGrades==null:jobKind.equals("grades")?grades==null:schedule==null)reason=reason.replace("已保留本地课表","暂无缓存，可稍后重试").replace("已保留上次记录","暂无缓存，可稍后重试");setState(reason);}
     void showLogin(){if(credentialBusy)return;teachingSessionGeneration++;teachingSessionRestoring=false;teachingSessionReady=true;generation++;busy=false;automaticCredentials=null;autoRunning=false;web.stopLoading();verified=false;startActivityForResult(new Intent(this,LoginActivity.class),20);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==30 && result==RESULT_OK && data!=null && data.getData()!=null){importWallpaper(data.getData());}
         if(request==31){imageBusy=false;if(result==RESULT_OK){followBackgroundTheme();refreshAppearance();render();Toast.makeText(this,"裁切壁纸已保存",Toast.LENGTH_SHORT).show();}}
@@ -646,7 +666,7 @@ public class MainActivity extends Activity {
         for(Course c:localCourses){LinearLayout item=panel();item.setPadding(dp(16),dp(13),dp(16),dp(13));LinearLayout title=row();View swatch=new View(this);swatch.setBackground(shape(courseColor(c),4));title.addView(swatch,new LinearLayout.LayoutParams(dp(7),dp(28)));TextView name=label(c.name,16,INK,true);name.setPadding(dp(10),0,0,0);title.addView(name);item.addView(title);space(item,8);item.addView(label("周"+"一二三四五六日".charAt(c.day-1)+" · "+c.start+"–"+c.end+" 节 · "+c.weekText+" 周",12,MUTED,false));item.addView(label((c.term.equals("*")?"所有学期":c.term)+(c.room.isEmpty()?"":" · "+c.room),12,MUTED,false));item.setOnClickListener(v->{sheet.dialog.dismiss();detail(c);});item.setFocusable(true);item.setContentDescription(c.name+"，自定义课程，点按管理");content.addView(item);space(content,10);}
         sheet.actions(this,"＋ 添加课程",()->{sheet.dialog.dismiss();editCustom(null);});showSheet(sheet);
     }
-    String authStatus(){if(credentialBusy)return "正在处理本机凭证…";if(autoRunning)return "正在自动登录…";if(verified)return "已登录 · 教务连接正常";if(prefs.getBoolean("autoBlocked",false))return qrLogin()?"扫码会话已失效 · 建议密码登录":"需要重新登录或验证码";if(prefs.getBoolean("loginCompleted",false))return busy?"登录状态验证中…":"登录状态待联网验证";return "未登录";}
+    String authStatus(){if(credentialBusy)return "正在处理本机凭证…";if(autoRunning)return "正在自动登录…";if(verified)return "已登录 · 教务连接正常";if(authServiceUnavailable)return busy?"正在重新连接教务…":"教务暂时无法连接 · 可稍后刷新重试";if(prefs.getBoolean("autoBlocked",false))return qrLogin()?"扫码会话已失效 · 建议密码登录":"需要重新登录或验证码";if(prefs.getBoolean("loginCompleted",false))return busy?"登录状态验证中…":"登录状态待联网验证";return "未登录";}
     View userView(){
         LinearLayout content=column();content.setPadding(dp(6),dp(12),dp(6),dp(18));LinearLayout user=panel();MoreMenu.Icon avatar=new MoreMenu.Icon(this,4,INK);avatar.setBackground(shape(palette.selectedSurface,20));user.addView(avatar,new LinearLayout.LayoutParams(dp(60),dp(60)));space(user,16);user.addView(label("教务账号",22,INK,true));space(user,8);authStatusText=label(authStatus(),15,INK,true);user.addView(authStatusText);
         long at=prefs.getLong("lastAuthAt",0);if(at>0){space(user,6);user.addView(label("最近验证 "+stamp(at),12,MUTED,false));}space(user,20);
@@ -680,7 +700,7 @@ public class MainActivity extends Activity {
         if(credentialBusy)return;credentialBusy=true;teachingSessionGeneration++;teachingSessionRestoring=false;teachingSessionReady=true;generation++;busy=false;autoRunning=false;automaticCredentials=null;web.stopLoading();
         prefs.edit().putBoolean("autoLogin",false).apply();
         authIo.execute(()->{CredentialStore.clear(this);TeachingSessionStore.clear(this);handler.post(()->{if(isDestroyed())return;
-            if(logout){prefs.edit().putBoolean("loginCompleted",false).putBoolean("autoBlocked",false).remove("lastAuthAt").apply();verified=false;
+            if(logout){prefs.edit().putBoolean("loginCompleted",false).putBoolean("autoBlocked",false).remove("autoBlockReason").remove("lastAuthAt").apply();verified=false;authServiceUnavailable=false;
                 SessionCookies.teaching(()->{credentialBusy=false;setState("已退出登录 · 本地课程继续保留");render();});
             }else{credentialBusy=false;setState("登录保存已关闭，加密凭证与会话已清除");render();}
         });});render();

@@ -35,7 +35,7 @@ public final class LoginActivity extends Activity {
     Dialog loginFailureDialog;
     Handler handler=new Handler(Looper.getMainLooper());
     String stateScript,submitScript,qrScript;
-    boolean loaded=false,attempting=false,submitted=false;
+    boolean loaded=false,pageFailed=false,attempting=false,submitted=false;
     int attempt=0;
     long deadline,submittedAt;
     @Override public void onCreate(Bundle saved){
@@ -71,15 +71,15 @@ public final class LoginActivity extends Activity {
         WebSettings settings=engine.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setCacheMode(WebSettings.LOAD_NO_CACHE);settings.setUseWideViewPort(true);settings.setLoadWithOverviewMode(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         CookieManager.getInstance().setAcceptCookie(true);
         engine.setWebChromeClient(new WebChromeClient(){
-            @Override public boolean onJsAlert(WebView v,String url,String message,JsResult result){result.confirm();if(trusted(url)){error(message.length()>240?message.substring(0,240):message);inspectChallenge();}return true;}
+            @Override public boolean onJsAlert(WebView v,String url,String message,JsResult result){result.confirm();if(trusted(url)){error(message.length()>240?message.substring(0,240):message,TeachingLoginPolicy.classify(message));inspectChallenge();}return true;}
         });
         engine.setWebViewClient(new WebViewClient(){
-            @Override public void onPageStarted(WebView v,String url,Bitmap icon){loaded=false;}
+            @Override public void onPageStarted(WebView v,String url,Bitmap icon){loaded=false;pageFailed=false;}
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){if(MainActivity.isSchoolHttps(r.getUrl().toString()))return false;if(r.isForMainFrame())error("学校登录跳转不受支持，请稍后重试。");return true;}
-            @Override public void onPageFinished(WebView v,String url){loaded=true;if(trusted(url)&&"/frame/homes.action".equals(Uri.parse(url).getPath())){complete();return;}if(!attempting&&!qrMode)inspectChallenge();}
-            @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame()){loaded=false;error("连接学校失败，请检查网络后重试。");}}
-            @Override public void onReceivedHttpError(WebView v,WebResourceRequest r,WebResourceResponse e){if(r.isForMainFrame()){loaded=false;error("学校服务暂不可用（"+e.getStatusCode()+"），请稍后重试。");}}
-            @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){h.cancel();loaded=false;error("学校安全连接失败，请检查手机日期或稍后重试。");}
+            @Override public void onPageFinished(WebView v,String url){if(pageFailed)return;loaded=true;if(trusted(url)&&"/frame/homes.action".equals(Uri.parse(url).getPath())){complete();return;}if(!attempting&&!qrMode)inspectChallenge();}
+            @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame()){loaded=false;pageFailed=true;error("连接学校失败，请检查网络后重试。");}}
+            @Override public void onReceivedHttpError(WebView v,WebResourceRequest r,WebResourceResponse e){if(r.isForMainFrame()){loaded=false;pageFailed=true;error("学校服务暂不可用（"+e.getStatusCode()+"），请稍后重试。");}}
+            @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){h.cancel();loaded=false;pageFailed=true;error("学校安全连接失败，请检查手机日期或稍后重试。");}
         });
         if(CredentialStore.exists(this))vault.execute(()->{try{CredentialStore.Credentials savedCredentials=CredentialStore.load(this);handler.post(()->{if(!isDestroyed()&&!isFinishing()&&account.getText().length()==0){account.setText(savedCredentials.account);password.setText(savedCredentials.password);}});}catch(Exception ignored){}});
         // A manual login must not immediately reuse an existing session and dismiss the form.
@@ -144,13 +144,14 @@ public final class LoginActivity extends Activity {
                 if(kind.equals("success")){complete();return;}
                 if(kind.equals("ready")){
                     showChallenge(state);
+                    if(submitted&&!state.optString("message").isEmpty()){String message=state.optString("message");error(message,TeachingLoginPolicy.classify(message));return;}
                     if(!submitted){
                         if(state.optBoolean("captcha")&&captcha.getText().length()==0){error("学校要求验证码，请输入后登录。");return;}
                         submitted=true;submittedAt=SystemClock.elapsedRealtime();status.setText("正在验证账号…");
                         submittedAccount=account.getText().toString().trim();submittedPassword=password.getText().toString();
                         String call=submitScript.trim()+"("+JSONObject.quote(submittedAccount)+","+JSONObject.quote(submittedPassword)+","+JSONObject.quote(captcha.getText().toString().trim())+")";
                         engine.evaluateJavascript(call,response->{if(id!=attempt)return;try{JSONObject r=new JSONObject(response);if(r.has("error")){error(r.optString("error").equals("captcha")?"请输入学校验证码":"学校登录表单发生变化，请稍后重试。");inspectChallenge();}}catch(Exception e){error("登录请求未成功发送，请重试。");}});
-                    }else if(SystemClock.elapsedRealtime()-submittedAt>10000){error("登录未完成，请检查账号、密码或验证码。");return;}
+                    }else if(SystemClock.elapsedRealtime()-submittedAt>10000){error("学校尚未返回登录结果，请稍后重试。");return;}
                 }
                 handler.postDelayed(()->poll(id),600);
             }catch(Exception e){error("学校登录页面暂时无法读取，请重试。");}
@@ -159,8 +160,11 @@ public final class LoginActivity extends Activity {
     void inspectChallenge(){if(qrMode||!loaded||!trusted(engine.getUrl()))return;engine.evaluateJavascript(stateScript,value->{if(isDestroyed())return;try{JSONObject state=new JSONObject(value);if(state.optString("state").equals("ready"))showChallenge(state);}catch(Exception ignored){}});}
     void showChallenge(JSONObject s){boolean required=s.optBoolean("captcha");challenge.setVisibility(required?View.VISIBLE:View.GONE);if(required){String image=s.optString("image");if(image.startsWith("data:image/png;base64,")){byte[] bytes=android.util.Base64.decode(image.substring(image.indexOf(',')+1),android.util.Base64.DEFAULT);captchaImage.setImageBitmap(BitmapFactory.decodeByteArray(bytes,0,bytes.length));}else{status.setText("验证码尚未加载，可点击图片区域刷新。");}}}
     void error(String message){
+        error(message,TeachingLoginPolicy.Failure.TEMPORARY);
+    }
+    void error(String message,TeachingLoginPolicy.Failure failure){
         if(completing||isDestroyed())return;
-        boolean failedSubmission=submitted;
+        boolean failedSubmission=submitted&&failure.warning;
         attempt++;attempting=false;submitted=false;submittedPassword=null;qrRunning=false;if(qrMode){stopQr(()->{});qrRefresh.setText("重新生成二维码");qrImage.setImageDrawable(null);}
         account.setEnabled(true);password.setEnabled(true);remember.setEnabled(true);submit.setEnabled(true);
         passwordTab.setEnabled(true);qrTab.setEnabled(true);
@@ -168,14 +172,14 @@ public final class LoginActivity extends Activity {
         if(failedSubmission&&(loginFailureDialog==null||!loginFailureDialog.isShowing()))loginFailureDialog=LoginFailureWarning.show(this,theme);
     }
     void complete(){
-        if(completing||isFinishing()||(!attempting&&!qrRunning)||!trusted(engine.getUrl())||!"/frame/homes.action".equals(Uri.parse(engine.getUrl()).getPath()))return;completing=true;attempt++;attempting=false;qrRunning=false;submit.setEnabled(false);qrRefresh.setEnabled(false);passwordTab.setEnabled(false);qrTab.setEnabled(false);remember.setEnabled(false);
+        if(completing||pageFailed||isFinishing()||(!attempting&&!qrRunning)||!trusted(engine.getUrl())||!"/frame/homes.action".equals(Uri.parse(engine.getUrl()).getPath()))return;completing=true;attempt++;attempting=false;qrRunning=false;submit.setEnabled(false);qrRefresh.setEnabled(false);passwordTab.setEnabled(false);qrTab.setEnabled(false);remember.setEnabled(false);
         final String user=submittedAccount,secret=submittedPassword;submittedPassword=null;password.setText("");
         final boolean keep=remember.isChecked(),scanned=qrMode;final String session=TeachingSessionStore.capture();status.setText("登录成功，正在保存…");
         vault.execute(()->{
             boolean saved=true;
             try{TeachingSessionStore.clear(this);if(scanned||!keep)CredentialStore.clear(this);if(keep){if(scanned)TeachingSessionStore.save(this,session);else if(user!=null&&secret!=null)CredentialStore.save(this,user,secret);else saved=false;}}catch(Exception e){saved=false;CredentialStore.clear(this);TeachingSessionStore.clear(this);}
             final boolean stored=saved;
-            getSharedPreferences("settings",MODE_PRIVATE).edit().putBoolean("loginCompleted",true).putBoolean("autoLogin",keep&&stored).putString("teachingLoginMethod",scanned?"qr":"password").putBoolean("autoBlocked",false).putLong("lastAuthAt",System.currentTimeMillis()).apply();
+            getSharedPreferences("settings",MODE_PRIVATE).edit().putBoolean("loginCompleted",true).putBoolean("autoLogin",keep&&stored).putString("teachingLoginMethod",scanned?"qr":"password").putBoolean("autoBlocked",false).remove("autoBlockReason").putLong("lastAuthAt",System.currentTimeMillis()).apply();
             handler.post(()->{if(isDestroyed())return;if(!stored)Toast.makeText(this,"登录成功，但加密凭证保存失败，下次需手动登录",Toast.LENGTH_LONG).show();CookieManager.getInstance().flush();setResult(RESULT_OK);finish();});
         });
     }
