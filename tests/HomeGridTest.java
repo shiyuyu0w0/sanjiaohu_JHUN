@@ -17,7 +17,7 @@ public final class HomeGridTest {
 
     static final int PLACEHOLDER=-1;
     /** 每行两张卡片之间的水平间距，与 MainActivity.homeView 的 dp(12) 对应。 */
-    static final int GAP=12;
+    static final int GAP=MainActivity.HOME_ENTRY_GAP;
 
     /**
      * 与 MainActivity.homeView() 一致的排布逻辑。
@@ -121,6 +121,26 @@ public final class HomeGridTest {
         check(layout(8)[3][0]==6&&layout(8)[3][1]==7);
         check(layout(1).length==1&&layout(1)[0][0]==0);  // 单个入口也补成两格
 
+        // A wrapped card must set the height for ALL rows, including the lone library card.
+        int[] measured={112,112,112,112,112,112,120,140,112};
+        HomeEntryGrid.Geometry actual=new HomeEntryGrid.Geometry(360,GAP,112,measured);
+        check(actual.height==140);
+        check(actual.width==174);
+        check(actual.top(8)-(actual.top(6)+actual.height)==GAP);
+        check(actual.totalHeight==5*140+4*GAP);
+        check(actual.left(8)==actual.left(6)&&actual.left(8)==0);
+        // Re-measuring on a wider screen can shrink every row back to the natural minimum.
+        HomeEntryGrid.Geometry wider=new HomeEntryGrid.Geometry(720,GAP,112,new int[]{110,110,110,110,110,110,110,110,110});
+        check(wider.height==112&&wider.width==354);
+        for(int count=1;count<=titles.length;count++){
+            HomeEntryGrid.Geometry layout=new HomeEntryGrid.Geometry(361,GAP,112,new int[count]);
+            for(int index=0;index<count;index++){
+                check(layout.width==174&&layout.height==112);
+                check(layout.left(index)+layout.width<=361);
+                if(index>=2)check(layout.top(index)-layout.top(index-2)-layout.height==GAP);
+                if(index%2==1)check(layout.left(index)-layout.left(index-1)-layout.width==GAP);
+            }
+        }
         System.out.println(checks+" 项首页入口网格检查通过");
     }
 }

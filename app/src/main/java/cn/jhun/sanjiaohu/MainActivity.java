@@ -615,34 +615,15 @@ public class MainActivity extends Activity {
     static final String[] HOME_TITLES={"考试查询","自定义课程","成绩查看","校园地图","校历","网上报修","电费","大物实验报告","图书查询"};
     static final String[] HOME_SUBTITLES={"考试安排 · 倒计时","添加与管理","按学期查看","探索校园","2026—2027 学年","校园后勤服务","电量查询 · 在线缴费","需连接校园网","馆藏 · 楼层库室"};
     static final int[] HOME_ICONS={19,8,11,13,14,15,17,18,23};
+    static final int HOME_ENTRY_GAP=12;
     View homeView(){
         LinearLayout content=column();content.setPadding(dp(6),dp(16),dp(6),dp(18));TextView heading=label("常用入口",17,INK,true);content.addView(heading);space(content,14);
         String[] titles=HOME_TITLES;
         String[] subtitles=HOME_SUBTITLES;
         int[] icons=HOME_ICONS;Runnable[] actions={()->openExams(),()->showCustomCourses(),()->openGrades(),()->openCampusMap(),()->startActivity(new Intent(this,AcademicCalendarActivity.class)),()->openIdentity(true),()->openElectricity(),()->openPhysicsLab(),()->openLibrary()};
-        // 内层循环必须带 j<titles.length 边界：入口数为奇数时，最后一次 j 会等于 length。
-        // 每行固定两个等宽的格子；最后一行只剩一个入口时补一个同权重的占位，
-        // 否则单独的入口会被 weight 拉成整行宽，比上一行的卡片宽一倍。
-        for(int i=0;i<titles.length;i+=2){
-            LinearLayout line=row();
-            int inRow=0;
-            for(int j=i;j<i+2&&j<titles.length;j++){
-                LinearLayout.LayoutParams cell=new LinearLayout.LayoutParams(0,-2,1);
-                if(inRow>0)cell.leftMargin=dp(12);
-                line.addView(homeEntry(titles[j],subtitles[j],icons[j],actions[j]),cell);
-                inRow++;
-            }
-            if(inRow==1){
-                // 补一个占位格，并给它和真实第二格相同的左间距；
-                // 少了这个 margin，两张卡就没有 12dp 的缝，格子会被撑成 rowWidth/2，
-                // 比上面每张卡各宽 6dp，看上去就"不等宽"。
-                LinearLayout.LayoutParams filler=new LinearLayout.LayoutParams(0,-2,1);
-                filler.leftMargin=dp(12);
-                line.addView(new View(this),filler);
-            }
-            content.addView(line);
-            if(i+2<titles.length)space(content,12);
-        }
+        HomeEntryGrid grid=new HomeEntryGrid(this,dp(HOME_ENTRY_GAP),dp(112));
+        for(int i=0;i<titles.length;i++)grid.addView(homeEntry(titles[i],subtitles[i],icons[i],actions[i]),new android.view.ViewGroup.LayoutParams(-2,-2));
+        content.addView(grid,new LinearLayout.LayoutParams(-1,-2));
         return content;
     }
 

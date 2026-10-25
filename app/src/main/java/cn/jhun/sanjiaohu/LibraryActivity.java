@@ -48,9 +48,9 @@ public final class LibraryActivity extends Activity {
 
     // Match the spacing, touch targets and rounded cards used by the other native pages.
     static final int CARD_RADIUS=20,CARD_PAD_H=18,CARD_PAD_V=16;
-    static final int VIEW_HEIGHT=48,SEARCH_HEIGHT=52,PICKER_HEIGHT=44,CONTROL_GAP=12;
+    static final int VIEW_HEIGHT=48,SEARCH_HEIGHT=52,PICKER_HEIGHT=44,ROW_GAP=12;
     static final int HOLDING_PAD_H=12,HOLDING_PAD_V=10,HOLDING_GAP=8,HOLDING_RADIUS=14;
-    static final int PAGER_HEIGHT=44,TRIGGER_HEIGHT=44,TRIGGER_GAP=12;
+    static final int PAGER_HEIGHT=44,PAGER_GAP=8,TRIGGER_HEIGHT=44,TRIGGER_GAP=12;
 
     static final String[][] TYPES={{"title","题名"},{"keyword","主题词"},{"author","著者"},{"isbn","标准编码"}};
 
@@ -89,13 +89,13 @@ public final class LibraryActivity extends Activity {
         keyword.setContentDescription("检索词");
         keyword.setOnEditorActionListener((v,a,e)->{if(a==EditorInfo.IME_ACTION_SEARCH){runSearch(1);return true;}return false;});
         search.addView(keyword,new LinearLayout.LayoutParams(0,dp(SEARCH_HEIGHT),1));
-        LinearLayout.LayoutParams searchSize=new LinearLayout.LayoutParams(dp(76),dp(SEARCH_HEIGHT));searchSize.leftMargin=dp(CONTROL_GAP);
+        LinearLayout.LayoutParams searchSize=new LinearLayout.LayoutParams(dp(76),dp(SEARCH_HEIGHT));searchSize.leftMargin=dp(10);
         searchButton=themedButton("搜索",()->runSearch(1),true);search.addView(searchButton,searchSize);
         root.addView(search);
 
         // Keep the field picker compact, like the term picker elsewhere in the app.
-        root.addView(new View(this),new LinearLayout.LayoutParams(1,dp(CONTROL_GAP)));
-        typeRow=row();typeRow.setPadding(dp(18),0,dp(18),dp(CONTROL_GAP));
+        root.addView(new View(this),new LinearLayout.LayoutParams(1,dp(ROW_GAP)));
+        typeRow=row();typeRow.setPadding(dp(18),0,dp(18),dp(10));
         typePicker=themedButton("",()->chooseSearchType(),false);
         typePicker.setTextSize(14);
         // 文字靠左、垂直居中；右侧留出下拉箭头的宽度，避免文字压到箭头上
@@ -105,14 +105,14 @@ public final class LibraryActivity extends Activity {
         updateTypePicker();
 
         status=text("输入关键词查询馆藏",13,theme.muted,false);
-        status.setPadding(dp(18),0,dp(18),dp(CONTROL_GAP));status.setLineSpacing(dp(3),1);
+        status.setPadding(dp(18),0,dp(18),dp(8));status.setLineSpacing(dp(3),1);
         root.addView(status);
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);
         progress.setIndeterminateTintList(ColorStateList.valueOf(theme.primary));progress.setVisibility(View.INVISIBLE);
         root.addView(progress,new LinearLayout.LayoutParams(-1,dp(2)));
 
         scroller=new ScrollView(this);scroller.setVerticalScrollBarEnabled(false);scroller.setClipToPadding(false);
-        LinearLayout content=column();content.setPadding(dp(18),dp(CONTROL_GAP),dp(18),dp(20));
+        LinearLayout content=column();content.setPadding(dp(18),0,dp(18),dp(20));
         results=column();content.addView(results);
         emptyView=text("",14,theme.muted,false);emptyView.setGravity(Gravity.CENTER);
         emptyView.setLineSpacing(dp(6),1);emptyView.setPadding(dp(20),dp(60),dp(20),dp(60));
@@ -120,14 +120,14 @@ public final class LibraryActivity extends Activity {
         scroller.addView(content);root.addView(scroller,new LinearLayout.LayoutParams(-1,0,1));
 
         // 翻页条固定在底部，不随结果滚动
-        LinearLayout pager=row();pager.setGravity(Gravity.CENTER_VERTICAL);pager.setPadding(dp(18),dp(CONTROL_GAP),dp(18),dp(CONTROL_GAP));
+        LinearLayout pager=row();pager.setGravity(Gravity.CENTER_VERTICAL);pager.setPadding(dp(18),dp(8),dp(18),dp(10));
         prevButton=themedButton("上一页",()->runSearch(page-1),false);
         prevButton.setTextSize(14);
         prevButton.setContentDescription("上一页");
         pager.addView(prevButton,new LinearLayout.LayoutParams(0,dp(PAGER_HEIGHT),1));
         pageLabel=text("",13,theme.muted,false);pageLabel.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams labelSize=new LinearLayout.LayoutParams(dp(84),dp(PAGER_HEIGHT));
-        labelSize.leftMargin=dp(CONTROL_GAP);labelSize.rightMargin=dp(CONTROL_GAP);
+        LinearLayout.LayoutParams labelSize=new LinearLayout.LayoutParams(0,dp(PAGER_HEIGHT),1);
+        labelSize.leftMargin=dp(PAGER_GAP);labelSize.rightMargin=dp(PAGER_GAP);
         pager.addView(pageLabel,labelSize);
         nextButton=themedButton("下一页",()->runSearch(page+1),false);
         nextButton.setTextSize(14);
@@ -195,7 +195,7 @@ public final class LibraryActivity extends Activity {
             },chosen);
             choice.setTextSize(16);
             LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(-1,dp(VIEW_HEIGHT));
-            size.topMargin=dp(CONTROL_GAP);card.addView(choice,size);
+            size.topMargin=dp(8);card.addView(choice,size);
         }
         ScrollView choices=new ScrollView(this){@Override protected void onMeasure(int w,int h){
             super.onMeasure(w,View.MeasureSpec.makeMeasureSpec((int)(getResources().getDisplayMetrics().heightPixels*.8f),View.MeasureSpec.AT_MOST));
