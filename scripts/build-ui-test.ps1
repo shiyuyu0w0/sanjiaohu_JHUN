@@ -15,6 +15,7 @@ $manifest = @'
     <application android:label="Sanjiaohu UI regression" />
     <instrumentation android:name="cn.jhun.sanjiaohu.UiSmokeInstrumentation" android:targetPackage="cn.jhun.sanjiaohu" />
     <instrumentation android:name="cn.jhun.sanjiaohu.GridInstrumentation" android:targetPackage="cn.jhun.sanjiaohu" />
+    <instrumentation android:name="cn.jhun.sanjiaohu.UpgradeInstrumentation" android:targetPackage="cn.jhun.sanjiaohu" />
 </manifest>
 '@
 [IO.File]::WriteAllText("$work/AndroidManifest.xml",$manifest,(New-Object Text.UTF8Encoding($false)))

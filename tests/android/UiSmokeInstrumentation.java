@@ -30,14 +30,16 @@ public final class UiSmokeInstrumentation extends Instrumentation {
             activity=(MainActivity)startActivitySync(new Intent(getTargetContext(),MainActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             settle();
+            assertPage(1);
+            onMain(()->check(activity.weekHost!=null,"cold launch opens timetable"));
             onMain(()->{
                 android.widget.FrameLayout original=activity.root;
                 feedback=new FeedbackRoot();feedback.setPadding(original.getPaddingLeft(),original.getPaddingTop(),original.getPaddingRight(),original.getPaddingBottom());
                 activity.root=feedback;activity.setContentView(feedback);activity.render();
             });settle();
             checkBars(activity);
-            screenshot("home");
-            nav("课程",1);nav("个人",2);nav("首页",0);
+            screenshot("default-timetable");
+            nav("首页",0);nav("课程",1);nav("个人",2);nav("首页",0);
             openActivity("成绩查看",LoginActivity.class);assertPage(3);click("返回首页");settle();assertPage(0);
             openActivity("考试查询",LoginActivity.class);assertPage(4);click("返回首页");settle();assertPage(0);
             click("自定义课程");settle();assertSheet();dismissSheet();
@@ -47,7 +49,7 @@ public final class UiSmokeInstrumentation extends Instrumentation {
             openActivity("大物实验报告",PhysicsLabActivity.class);
             openActivity("网上报修",IdentityActivity.class);
             openActivity("电费",IdentityActivity.class);
-            nav("个人",2);openActivity("关于",AboutActivity.class);
+            nav("个人",2);openActivity("关于",AboutActivity.class);assertPage(2);
             Activity crop=startActivitySync(new Intent(getTargetContext(),WallpaperCropActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             settle();checkBars(crop);screenshot("WallpaperCropActivity");onMain(crop::finish);settle();
             nav("课程",1);click("更多选项");settle();
@@ -66,6 +68,7 @@ public final class UiSmokeInstrumentation extends Instrumentation {
                 check(activity.pageAnimator==null,"page animator cleared");
                 check(activity.pageContent.getAlpha()==1,"incoming page visible");
                 check(activity.pageContent.getTranslationX()==0,"incoming page settled");
+                check(activity.pageContent.getScaleX()==1&&activity.pageContent.getScaleY()==1,"incoming page scale restored");
                 check(activity.pageContent.getClipChildren(),"scroll content cannot overlap status and navigation");
             });
             populatedPages();
@@ -130,7 +133,13 @@ public final class UiSmokeInstrumentation extends Instrumentation {
                     android.view.ViewGroup nav=(android.view.ViewGroup)activity.screen.getChildAt(activity.screen.getChildCount()-1);
                     nav.getChildAt(target).performClick();
                     check(feedback.requests==before+(source==target?0:1),"one feedback for tab "+source+" -> "+target);
+                    assertTabMotion(source,target);
                 });settle();
+                onMain(()->{
+                    check(activity.pageAnimator==null&&activity.outgoing==null,"tab motion removes outgoing page");
+                    check(activity.pageContent.getAlpha()==1&&activity.pageContent.getTranslationX()==0,"tab motion settles visibly");
+                    check(activity.pageContent.getScaleX()==1&&activity.pageContent.getScaleY()==1,"tab motion restores scale");
+                });
             }
             onMain(()->{
                 int before=feedback.requests;feedback.setHapticFeedbackEnabled(false);activity.switchPage(0);
@@ -169,6 +178,28 @@ public final class UiSmokeInstrumentation extends Instrumentation {
                 if(fixture!=null&&fixture!=savedWallpaper)fixture.recycle();
             });
         }
+    }
+    private void assertTabMotion(int from,int to){
+        if(from==to||!Ui.animated()){
+            check(activity.pageAnimator==null&&activity.outgoing==null,"same tab or disabled animations switch immediately");return;
+        }
+        check(activity.pageAnimator!=null&&activity.pageAnimator.isRunning(),"animation starts for tab "+from+" -> "+to);
+        android.animation.ValueAnimator motion=activity.pageAnimator;
+        int direction=to>from?1:-1;
+        motion.setCurrentPlayTime(motion.getDuration()/6);
+        check(activity.outgoingContent.getAlpha()>0&&activity.outgoingContent.getAlpha()<1,"outgoing page visibly fades");
+        check(activity.outgoingContent.getTranslationX()*direction<0,"outgoing page moves opposite to arrival");
+        check(activity.pageContent.getAlpha()==0,"pages do not overlap during exit");
+        motion.setCurrentPlayTime(motion.getDuration()/2);
+        check(activity.pageContent.getAlpha()>0&&activity.pageContent.getAlpha()<1,"incoming page visibly fades");
+        check(activity.pageContent.getTranslationX()*direction>0,"incoming page follows tab direction");
+        check(activity.pageContent.getScaleX()>.98f&&activity.pageContent.getScaleX()<1,"incoming page gently expands");
+        check(activity.outgoingContent.getAlpha()==0,"outgoing content hidden during entrance");
+        ViewGroup nav=(ViewGroup)activity.screen.getChildAt(activity.screen.getChildCount()-1);
+        View icon=((ViewGroup)nav.getChildAt(to)).getChildAt(0);
+        check(icon.getScaleX()<1,"selected tab icon begins spring feedback");
+        // Rendering during a transition must clean up both pages, including the new scale.
+        if(from==2&&to==0){activity.render();check(activity.pageContent.getScaleX()==1,"refresh cancels transition cleanly");}
     }
     private void assertWallpaperEdge(){
         View grid=activity.weekHost.getChildAt(0);int w=grid.getWidth(),h=grid.getHeight();

@@ -7,7 +7,7 @@ import android.view.ViewGroup;
 /** Shared motion and touch feedback. */
 public final class Ui {
     private Ui(){}
-    public static final long DURATION_FAST=120,DURATION_PAGE=250,DURATION_ENTER=280,DURATION_SLOW=360;
+    public static final long DURATION_FAST=120,DURATION_PAGE=320,DURATION_ENTER=280,DURATION_SLOW=360;
     public static int dp(Context c,float x){return (int)(x*c.getResources().getDisplayMetrics().density+0.5f);}
     /** 标准缓动：起步快、收尾稳，和周切换手势用的是同一条曲线。 */
     public static android.view.animation.Interpolator easing(){

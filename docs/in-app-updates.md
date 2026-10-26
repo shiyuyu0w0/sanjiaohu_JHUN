@@ -1,139 +1,98 @@
 # 三角狐应用内更新与发布
 
+## 当前发布准备
+
+待发布版本为 **1.1.9（versionCode 52）**，最低 Android 8.0（API 26）。本次发布材料、校验结果与操作清单见 [v1.1.9 发布准备](release-1.1.9.md)。
+
+本次准备保留 `updates/stable/version.json` 中已上线的 1.1.8（修订号 12），将 1.1.9 的关闭清单放在 `updates/staged/1.1.9.json`（修订号 13）。客户端只读取 stable 路径，不会发现尚未上传的安装包。脚本不会创建远程 Release、提交代码或推送仓库。
+
 ## 更新功能
 
-当前客户端版本为 **1.1.8（versionCode 51）**。入口是「个人 → 关于」中版本号左侧的「检查更新」小按钮。点击直接检查，没有独立更新页面；无可用更新时只显示简短提示，有新版本时弹出下载及安装提示，跟随应用主题及深色模式。
+入口在「个人 → 关于 → 检查更新」。手动检查立即执行；自动检查按成功后 24 小时、失败后至少 15 分钟的间隔进行。自动发现新版只标记入口，不弹窗打断使用。
 
-- 手动检查立即执行；进入前台距上次成功检查超过 24 小时才自动检查。失败后的自动尝试至少间隔 15 分钟，手动检查不受此限制。
-- 自动发现新版本，在个人页关于入口和关于页显示标记，不弹窗打断使用。
-- 用户选择下载后，默认使用加速线路；失败自动尝试官方线路一次。断网等待、主动取消、两条线路均失败，都不会反复切换。
-- 下载交给 Android DownloadManager，应用关闭后可以继续下载。回到关于页时恢复任务，点击检查更新可查看进度或安装；自定义线路切换不会在应用进程结束后自行运行。
-- 校验完成后显示「立即安装」。用户点击、授予安装权限并在 Android 系统界面确认后才能覆盖安装。
+下载默认优先 Gitee，再尝试 GitHub 加速和 GitHub 官方线路。下载完成后核对安装包，由用户在 Android 系统界面确认覆盖安装。应用内更新从 1.1.2 开始支持；更早版本需要手动下载覆盖安装。同一版本不会重复提示更新。
 
-**应用内更新从 1.1.2 开始支持。现有 1.1.1 没有此功能，需要先手动安装 1.1.3；以后才能在应用里完成升级。** 同一版本不会提示更新。
+## 发布前：构建并生成待发布清单
 
-本地已生成 `updates/stable/version.json`，初始 `enabled` 为 `false`。脚本和本地构建均不会创建 GitHub Release，也不会提交或推送仓库。
+同时更新以下文件的版本信息：
 
-## 更新来源
+- `app/build.gradle` 与 `app/src/main/AndroidManifest.xml`：版本名及递增的 versionCode。
+- `AboutActivity.java` 与 `tests/AboutChangelogTest.java`：应用内更新日志及对应检查。
+- 构建、重签名、更新准备、更新校验及发布测试脚本：默认安装包文件名。
+- `updates/release-notes-版本号.txt`：每行一条，供更新弹窗使用。
+- `updates/release-notes-版本号.md`：供 GitHub、Gitee Release 使用。
 
-版本清单原文件在本仓库的 `updates/stable/version.json`，客户端固定使用：
-
-1. `https://cdn.jsdelivr.net/gh/shiyuyu0w0/sanjiaohu_JHUN@main/updates/stable/version.json`
-2. `https://raw.githubusercontent.com/shiyuyu0w0/sanjiaohu_JHUN/main/updates/stable/version.json`
-3. `https://ghproxy.net/https://raw.githubusercontent.com/shiyuyu0w0/sanjiaohu_JHUN/main/updates/stable/version.json`
-
-前两个并发请求；遇到失败，或半程仍未收齐结果，再尝试第三个。整轮检查最多等待 12 秒，比较所有已返回有效结果的 `manifestRevision`。相同修订号内容冲突会停用下载；仅返回比本地已知修订更旧的数据会提示来源未同步。全部失败显示检查失败，不声称已是最新版。
-
-APK 只接受本仓库 `releases/download/v版本号/Sanjiaohu-版本号.apk` 和套在该地址外的 `https://ghproxy.net/` 代理。公共代理可用性不作保证，官方直链始终保留。检查请求不附带学校登录 Cookie 或 GitHub Token。
-
-## 发布当前版本 1.1.3
-
-在项目根目录打开 PowerShell。先确认当前根目录 APK 是要发布的最终文件；清单生成之后不要再次构建或重新签名这一份 APK，否则哈希会变化。
-
-### 1. 本地构建和验证
+在项目根目录打开 PowerShell：
 
 ```powershell
-./build-local.ps1 -Work "$PWD/build/app-update"
+./build-local.ps1 -Work "$PWD/build/release-1.1.9"
+./scripts/test-local.ps1 -Classes "$PWD/build/release-1.1.9/classes"
+./tests/UpdateReleaseTest.ps1 -Apk ./Sanjiaohu-1.1.9.apk
 ```
 
-如果重新构建了本次安装包，重新生成清单并提高修订号：
+构建使用 `signing/development.keystore` 中的原有签名；不能换成新密钥。最终安装包为根目录 `Sanjiaohu-1.1.9.apk`。
+
+首次准备 1.1.9 的清单命令如下（本次已经执行，不要直接用同一修订号覆盖）：
 
 ```powershell
 ./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.3.apk `
-  -ManifestRevision 6 `
-  -NotesFile ./updates/release-notes-1.1.3.txt
+  -Apk ./Sanjiaohu-1.1.9.apk `
+  -ManifestRevision 13 `
+  -NotesFile ./updates/release-notes-1.1.9.txt `
+  -Output ./updates/staged/1.1.9.json
 
-./scripts/verify-update.ps1 -Offline
+./scripts/verify-update.ps1 `
+  -Apk ./Sanjiaohu-1.1.9.apk `
+  -Manifest ./updates/staged/1.1.9.json `
+  -Offline
 ```
 
-不传 `-Enable` 时清单保持关闭。仓库里已有修订号时，新值必须比它大。`-Offline` 验证本地签名、包名、版本、最低 Android 版本、大小和 SHA-256，不检查网络线路。
+不传 `-Enable` 时清单关闭。每次清单变化必须提高修订号，取比本地 stable、staged 和线上清单都大的值。重新构建或签名后必须重新生成清单和校验文件；发布时上传的必须是校验过的同一份 APK。
 
-下文修订号仅作示例，请先查看本地及线上清单，使用比两者都大的值。重新构建 APK 后应再次生成清单。
+## 发布：上传安装包后启用更新
 
-### 2. 上传 GitHub Release
-
-在 `shiyuyu0w0/sanjiaohu_JHUN` 创建 Release：
-
-- 标签：`v1.1.3`
-- 附件：项目根目录的 `Sanjiaohu-1.1.3.apk`
-- 更新说明可使用 `updates/release-notes-1.1.3.txt`。
-
-发布后，官方 APK 地址应为：
-
-```text
-https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.1.3/Sanjiaohu-1.1.3.apk
-```
-
-只能上传最终签名 APK，签名密钥和密码不要上传。
-
-### 3. 验证两条线路并启用
+1. 提交所有本次功能及发布准备改动，确保 `v1.1.9` 标签指向最终源码提交。GitHub、Gitee 使用相同版本标签与源码。
+2. 分别创建 GitHub 和 Gitee 的 `v1.1.9` Release，标题为「三角狐 v1.1.9」。正文使用 `updates/release-notes-1.1.9.md`，两处上传同一个 `Sanjiaohu-1.1.9.apk`。可同时附上校验文件，勿上传密钥或整个构建目录。
+3. 两处附件可访问后再生成开启清单。若本地及线上修订号仍不超过 13，可用 14：
 
 ```powershell
 ./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.3.apk `
-  -ManifestRevision 7 `
-  -NotesFile ./updates/release-notes-1.1.3.txt `
-  -Enable
-```
-
-此命令先从官方和代理各下载一遍，确认它们与本地签名 APK 的大小、SHA-256 一致，才写入 `enabled: true`。任何线路返回错误页、未上传、超时或文件不一致，都不会覆盖已有清单。
-
-命令成功后，把代码及 `updates/stable/version.json` 正常提交并推送到 `main`。清单只存在本地时，手机无法读取它。已安装 1.1.3 的手机不会再收到 1.1.3 的更新提示。
-
-## 以后每次发布
-
-以 1.1.8 为例：
-
-1. 同时更新 `app/build.gradle` 和 `app/src/main/AndroidManifest.xml`：`versionName` 改成 1.1.8，`versionCode` 改成 51。实际值要高于所有已发布版本，不能只改显示名称。
-2. 更新关于页说明、相应测试的版本预期，以及两个构建/重签名脚本的默认输出文件名。
-3. 新建更新说明文本，每行一条，不需要自己写圆点或 JSON。
-4. 使用原签名密钥构建最终 APK；上传 `v1.1.8` Release，附件名必须为 `Sanjiaohu-1.1.8.apk`。
-5. 从当前线上修订号继续递增，运行：
-
-```powershell
-./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.8.apk `
-  -ManifestRevision 8 `
-  -NotesFile ./updates/release-notes-1.1.8.txt `
+  -Apk ./Sanjiaohu-1.1.9.apk `
+  -ManifestRevision 14 `
+  -NotesFile ./updates/release-notes-1.1.9.txt `
+  -Output ./updates/stable/version.json `
   -Enable
 
-./scripts/verify-update.ps1 -Apk ./Sanjiaohu-1.1.8.apk
+./scripts/verify-update.ps1 -Apk ./Sanjiaohu-1.1.9.apk -Offline
 ```
 
-6. 提交并推送清单到 `main`。在已安装 1.1.3 的手机上检查更新、下载、确认安装，核对升级后版本及课表等本地数据。
+`-Enable` 会下载 Gitee、GitHub 加速和 GitHub 官方三条线路的文件，全部通过大小与 SHA-256 检查才写入开启清单。任何一条失败都保留原清单，应修复上传或线路问题后重试，不要手工绕过检查。
 
-不要用旧的修订号修改清单内容；不要替换已发布版本的 APK 字节。需要修复时发布更高 `versionCode` 的版本。
+4. 提交并推送开启后的 `updates/stable/version.json` 到 `main`。只在本地保存或只上传 APK，都不能让旧版客户端收到更新。
+5. 用旧版手机检查更新、下载、确认安装，再核对版本与本地数据。
 
-## 撤回有问题的更新
+## 更新来源与校验
 
-保留同一版本和最终 APK，用更高修订号重新生成关闭清单，然后推送：
+客户端固定读取以下清单来源，比较所有已返回有效结果的修订号：
 
-```powershell
-./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.8.apk `
-  -ManifestRevision 9 `
-  -NotesFile ./updates/release-notes-1.1.8.txt
-```
+- `https://cdn.jsdelivr.net/gh/shiyuyu0w0/sanjiaohu_JHUN@main/updates/stable/version.json`
+- `https://raw.githubusercontent.com/shiyuyu0w0/sanjiaohu_JHUN/main/updates/stable/version.json`
+- `https://ghproxy.net/https://raw.githubusercontent.com/shiyuyu0w0/sanjiaohu_JHUN/main/updates/stable/version.json`
 
-省略 `-Enable` 即关闭。客户端下一次取得新清单后停止推荐并取消不再适用的下载。缓存与离线设备可能暂时看不到撤回，因此不能保证即时撤回，也不能降级已经安装新版的手机。
+整轮检查最多等待 12 秒。同修订号内容冲突时停用下载；仅返回更旧数据时提示来源未同步；全部失败时显示检查失败。更新请求不附带学校登录凭证。
 
-## 校验与安装边界
-
-下载文件先复制到应用内部私有目录，再对该快照核对大小、SHA-256、包名、版本名、版本号、最低系统要求和签名。安装前再次校验同一份文件，然后写入 PackageInstaller 会话。Android 最终验证 APK 签名并要求用户确认；没有静默安装。
-
-当前仅接受现有发布证书，不支持签名密钥轮换。客户端及发布脚本固定的 SHA-256 证书指纹为：
+APK 校验包含包名、版本名、versionCode、最低系统版本、文件大小、SHA-256 及签名。安装前再次校验，再交给 Android 系统安装。APK 上限 256 MiB，清单上限 64 KiB。当前固定接受的证书 SHA-256 为：
 
 ```text
 2d5c4c7ab3f5e829dfb2273f333a2af987e512dc270fbe03347638329cdef22a
 ```
 
-更新数据独立保存在 `app_updates` 偏好设置及更新目录，不与教务账号、课表缓存混用。APK 大小上限 256 MiB，清单上限 64 KiB。
+## 撤回更新
 
-## 本地验证与待实机验证
+针对已经启用的相同版本、相同 APK，用更高修订号运行准备脚本，输出到 stable，省略 `-Enable`，校验后推送。不要复用旧修订号，也不要替换已经发布的 APK 字节。修复安装包应发布更高 versionCode 的新版。
 
-`tests/UpdateTest.java` 覆盖版本及系统条件、地址限制、无效清单、修订冲突、缓存回退、并发检查、总时限和线路切换策略。使用真实 `org.json` Java 库编译运行，不要使用项目里只供其他测试用的 JSON 简化桩。
+撤回不会卸载或降级已经安装的应用，离线设备及缓存也可能延迟看到清单变化。
 
-发布脚本通过最终 APK 的 `aapt2 dump badging`、`apksigner verify` 和 SHA-256 检查本地清单。`verify-update.ps1` 默认还会检查两条线上下载线路；只有 `-Offline` 会跳过网络验证。
+## 验证范围
 
-本次环境没有连接 Android 测试设备，以下还需要实机验收：下载中断网/切换线路/取消、关闭进程后恢复、拒绝及重新授予安装权限、系统确认取消和重新安装、真实旧版本覆盖升级。不能用本地策略测试替代这些设备测试。
+本地策略与发布脚本测试之外，还应检查真实设备的更新下载、断网恢复、线路切换、取消下载、安装权限与系统确认流程。模拟器覆盖升级可验证签名兼容和本地数据保留，但不代替真实手机的触感体验、学校账号登录及线上下载验收。本次已经完成和仍待发布后执行的项目分别记录在版本发布准备文档中。

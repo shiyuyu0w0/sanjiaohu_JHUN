@@ -35,7 +35,8 @@ public class MainActivity extends Activity {
     boolean customReadError=false,todayLabel=false,verified=false,autoTried=false,autoSubmitted=false,autoRunning=false,credentialBusy=false;
     boolean teachingSessionReady=false,teachingSessionRestoring=false;
     int teachingSessionGeneration=0;
-    int page=0;
+    static final int DEFAULT_PAGE=1;
+    int page=DEFAULT_PAGE;
     long submittedAt;
     String loginStateScript,loginSubmitScript;
     CredentialStore.Credentials automaticCredentials;
@@ -94,7 +95,7 @@ public class MainActivity extends Activity {
         customStore=new CustomCourseStore(this);
         courseNoteStore=new CourseNoteStore(this);
         try{localCourses=customStore.load();}catch(Exception e){customReadError=true;}
-        if(saved!=null){page=saved.getInt("page",0);todayLabel=saved.getBoolean("todayLabel",false);wallpaperAspect=saved.getFloat("wallpaperAspect",.65f);}
+        if(saved!=null){page=saved.getInt("page",DEFAULT_PAGE);todayLabel=saved.getBoolean("todayLabel",false);wallpaperAspect=saved.getFloat("wallpaperAspect",.65f);}
         refreshAppearance();
         cache=new AtomicFile(new File(getFilesDir(),"schedule.json"));
         try {loginStateScript=read(getAssets().open("login-state.js"));loginSubmitScript=read(getAssets().open("login-submit.js"));schedulePortalScript=read(getAssets().open("schedule-portal.js"));scheduleListScript=read(getAssets().open("schedule-list.js"));} catch(Exception e) {throw new IllegalStateException("课表适配器缺失",e);}
@@ -415,29 +416,34 @@ public class MainActivity extends Activity {
             final int from=tabOf(transitionFrom),to=selectedTab;
             final int direction=directionBetween(transitionFrom,page);
             final int selectedColor=palette.selectedSurface;
-            final float travel=dp(28);
+            final float travel=dp(40);
+            final android.view.animation.Interpolator easing=Ui.easing();
             final LinearLayout leaving=outgoing,leavingContent=outgoingContent;
             final LinearLayout enteringContent=pageContent;
             final View leavingMast=leaving.getChildAt(0);
             final View enteringMast=mast;
-            // 淡出淡入错开：前 45% 旧内容退，后 55% 新内容进，两段不重叠才不会糊成一团。
+            // 按真实时间分配退场和入场，各自缓动，避免整体缓动把退场压缩成一闪。
             pageContent.setAlpha(0);pageContent.setTranslationX(travel*direction);
+            pageContent.setScaleX(.98f);pageContent.setScaleY(.98f);
             enteringMast.setAlpha(0);
             if(leavingContent!=null)leavingContent.setLayerType(View.LAYER_TYPE_HARDWARE,null);
             pageContent.setLayerType(View.LAYER_TYPE_HARDWARE,null);
             android.animation.ArgbEvaluator evaluator=new android.animation.ArgbEvaluator();
             pageAnimator=android.animation.ValueAnimator.ofFloat(0,1);
-            pageAnimator.setDuration(Ui.DURATION_PAGE);pageAnimator.setInterpolator(Ui.easing());
+            pageAnimator.setDuration(Ui.DURATION_PAGE);pageAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
             pageAnimator.addUpdateListener(animation->{
                 float t=(Float)animation.getAnimatedValue();
-                float out=Math.min(1,t/.45f),in=Math.max(0,(t-.45f)/.55f);
+                float out=easing.getInterpolation(Math.min(1,t/.35f));
+                float in=easing.getInterpolation(Math.max(0,(t-.35f)/.65f));
+                float selection=easing.getInterpolation(t);
                 if(leavingContent!=null){leavingContent.setAlpha(1-out);leavingContent.setTranslationX(-travel*direction*out);}
                 leavingMast.setAlpha(1-out);
                 enteringContent.setAlpha(in);enteringContent.setTranslationX(travel*direction*(1-in));
+                enteringContent.setScaleX(.98f+.02f*in);enteringContent.setScaleY(.98f+.02f*in);
                 enteringMast.setAlpha(in);
                 for(int i=0;i<3;i++){
-                    tabBackgrounds[i].setColor((Integer)evaluator.evaluate(t,i==from?selectedColor:selectedColor&0xffffff,i==to?selectedColor:selectedColor&0xffffff));
-                    int color=(Integer)evaluator.evaluate(t,i==from?INK:MUTED,i==to?INK:MUTED);
+                    tabBackgrounds[i].setColor((Integer)evaluator.evaluate(selection,i==from?selectedColor:selectedColor&0xffffff,i==to?selectedColor:selectedColor&0xffffff));
+                    int color=(Integer)evaluator.evaluate(selection,i==from?INK:MUTED,i==to?INK:MUTED);
                     tabIcons[i].setColor(color);tabLabels[i].setTextColor(color);
                 }
             });
@@ -446,6 +452,7 @@ public class MainActivity extends Activity {
                     if(outgoing==leaving)dropOutgoing();else root.removeView(leaving);
                     enteringContent.setLayerType(View.LAYER_TYPE_NONE,null);
                     enteringContent.setAlpha(1);enteringContent.setTranslationX(0);enteringMast.setAlpha(1);
+                    enteringContent.setScaleX(1);enteringContent.setScaleY(1);
                     pageAnimator=null;
                 }
             });
