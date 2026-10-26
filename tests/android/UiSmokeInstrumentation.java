@@ -15,6 +15,13 @@ public final class UiSmokeInstrumentation extends Instrumentation {
     private MainActivity activity;
     private int checks;
     private Throwable mainFailure;
+    private FeedbackRoot feedback;
+
+    private final class FeedbackRoot extends android.widget.FrameLayout {
+        int requests;
+        FeedbackRoot(){super(activity);}
+        @Override public boolean performHapticFeedback(int effect){requests++;return super.performHapticFeedback(effect);}
+    }
 
     @Override public void onCreate(Bundle args){super.onCreate(args);start();}
     @Override public void onStart(){
@@ -23,6 +30,11 @@ public final class UiSmokeInstrumentation extends Instrumentation {
             activity=(MainActivity)startActivitySync(new Intent(getTargetContext(),MainActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             settle();
+            onMain(()->{
+                android.widget.FrameLayout original=activity.root;
+                feedback=new FeedbackRoot();feedback.setPadding(original.getPaddingLeft(),original.getPaddingTop(),original.getPaddingRight(),original.getPaddingBottom());
+                activity.root=feedback;activity.setContentView(feedback);activity.render();
+            });settle();
             checkBars(activity);
             screenshot("home");
             nav("课程",1);nav("个人",2);nav("首页",0);
@@ -58,6 +70,7 @@ public final class UiSmokeInstrumentation extends Instrumentation {
             });
             populatedPages();
             weekMotion();
+            wallpaperAndFeedback();
             result.putString("stream","PASS: "+checks+" real Android UI smoke checks\n");finish(-1,result);
         }catch(Throwable failure){
             result.putString("stream","FAIL: "+android.util.Log.getStackTraceString(failure));finish(0,result);
@@ -101,6 +114,72 @@ public final class UiSmokeInstrumentation extends Instrumentation {
         });
     }
     private void check(boolean value,String message){checks++;if(!value)throw new AssertionError(message);}
+    private void wallpaperAndFeedback(){
+        final String anchorKey=activity.anchorKey();
+        final String savedAnchor=activity.prefs.getString(anchorKey,null);
+        final boolean hadCrop=activity.prefs.contains("wallpaperUserCrop"),savedCrop=activity.prefs.getBoolean("wallpaperUserCrop",false);
+        final android.graphics.Bitmap savedWallpaper=activity.wallpaper;
+        final int[] fullSize=new int[2];
+        try{
+            // Every ordered pair of bottom tabs must produce exactly one request.
+            for(int from=0;from<3;from++)for(int to=0;to<3;to++){
+                final int source=from,target=to;
+                onMain(()->activity.switchPage(source));settle();
+                onMain(()->{
+                    int before=feedback.requests;
+                    android.view.ViewGroup nav=(android.view.ViewGroup)activity.screen.getChildAt(activity.screen.getChildCount()-1);
+                    nav.getChildAt(target).performClick();
+                    check(feedback.requests==before+(source==target?0:1),"one feedback for tab "+source+" -> "+target);
+                });settle();
+            }
+            onMain(()->{
+                int before=feedback.requests;feedback.setHapticFeedbackEnabled(false);activity.switchPage(0);
+                check(feedback.requests==before,"view touch feedback setting respected");feedback.setHapticFeedbackEnabled(true);
+                activity.prefs.edit().putString(anchorKey,activity.today().toString()).putBoolean("wallpaperUserCrop",true).commit();
+                activity.switchPage(1);activity.selectedWeek=1;activity.render();
+            });settle();
+            onMain(()->{
+                fullSize[0]=activity.weekHost.getWidth();fullSize[1]=activity.weekHost.getHeight();
+                activity.wallpaper=android.graphics.Bitmap.createBitmap(fullSize[0],fullSize[1],android.graphics.Bitmap.Config.ARGB_8888);
+                activity.wallpaper.eraseColor(android.graphics.Color.CYAN);activity.render();
+            });settle();
+            onMain(()->{
+                assertWallpaperEdge();
+                int before=feedback.requests;activity.changeWeek(2);check(feedback.requests==before+1,"committed week has one feedback");
+            });settle();
+            onMain(()->{
+                int before=feedback.requests;activity.changeWeek(2);check(feedback.requests==before,"same week is silent");
+                activity.prepareWeek(3);activity.settleWeek(false);check(feedback.requests==before,"cancelled swipe is silent");
+            });settle();
+            onMain(()->{
+                int before=feedback.requests;activity.detail(Course.parse("测试课程 教师(1-16 教室)",1,1,20));
+                check(feedback.requests==before+1,"course detail has one feedback");activity.activeSheet.dismiss();
+                activity.prefs.edit().remove(anchorKey).commit();activity.render();
+            });settle();
+            onMain(()->{
+                check(activity.weekHost.getHeight()<fullSize[1],"calibration notice reduces viewport height");assertWallpaperEdge();
+                int before=feedback.requests;activity.changeWeek(3);check(feedback.requests==before,"uncalibrated week is silent");
+            });screenshot("wallpaper-uncalibrated");
+        }finally{
+            onMain(()->{
+                android.content.SharedPreferences.Editor edit=activity.prefs.edit();
+                if(savedAnchor==null)edit.remove(anchorKey);else edit.putString(anchorKey,savedAnchor);
+                if(hadCrop)edit.putBoolean("wallpaperUserCrop",savedCrop);else edit.remove("wallpaperUserCrop");edit.commit();
+                android.graphics.Bitmap fixture=activity.wallpaper;activity.wallpaper=savedWallpaper;activity.render();
+                if(fixture!=null&&fixture!=savedWallpaper)fixture.recycle();
+            });
+        }
+    }
+    private void assertWallpaperEdge(){
+        View grid=activity.weekHost.getChildAt(0);int w=grid.getWidth(),h=grid.getHeight();
+        android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);
+        try{
+            grid.getBackground().draw(new android.graphics.Canvas(image));
+            int expected=image.getPixel(w/2,h/2);
+            for(int y=activity.dp(32);y<h;y++)check(image.getPixel(w-1,y)==expected,"wallpaper covers right edge");
+            check(expected!=activity.palette.gridSurface,"test distinguishes image from blank surface");
+        }finally{image.recycle();}
+    }
     private void assertPage(int expected){onMain(()->check(activity.page==expected,"page "+expected));}
     private void nav(String label,int page){click(label);settle();assertPage(page);screenshot("page-"+page);}
     private void assertSheet(){onMain(()->check(activity.activeSheet!=null&&activity.activeSheet.isShowing(),"sheet visible"));}

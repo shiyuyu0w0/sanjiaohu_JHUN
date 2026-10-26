@@ -323,6 +323,7 @@ public class MainActivity extends Activity {
     void showMenu(View anchor){
         if(page!=1)return;
         if(moreMenu!=null && moreMenu.isShowing()){moreMenu.dismiss();return;}
+        Ui.tap(anchor);
         boolean hasPreviousSchedule=false;
         if(!selectedTerm.isEmpty())try{hasPreviousSchedule=academicStore.scheduleSnapshot(selectedTerm,"previous")!=null;}catch(Exception ignored){}
         moreMenu=MoreMenu.show(this,anchor,palette,hasPreviousSchedule,id->{switch(id){case 1:cancelSync();sync();break;case 2:if(anchor()==null)calibrate();else changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;case 21:restoreSchedule();break;}});
@@ -348,7 +349,7 @@ public class MainActivity extends Activity {
     LocalDate anchor(){try{return LocalDate.parse(prefs.getString(anchorKey(),""));}catch(Exception e){return null;}}
     int currentWeek(){LocalDate a=anchor();if(a==null)return 1;long w=ChronoUnit.DAYS.between(a,today())/7+1;if(today().isBefore(a))return 1;return (int)Math.max(1,Math.min(maxWeek(),w));}
     void calibrate(){new CalibrationSheet(this);}
-    void switchPage(int target){if(target==page)return;if(page==4)cancelSync();handler.removeCallbacks(examClock);transitionFrom=page;page=target;render();transitionFrom=-1;if(page==4)handler.postDelayed(examClock,30000);}
+    void switchPage(int target){if(target==page)return;Ui.selection(root);if(page==4)cancelSync();handler.removeCallbacks(examClock);transitionFrom=page;page=target;render();transitionFrom=-1;if(page==4)handler.postDelayed(examClock,30000);}
     /** 底栏三个标签里的下标；成绩/考试查询折回「首页」那一格。 */
     static int tabOf(int page){return page>=3?0:page;}
     /** 层级：底栏三页是 0，成绩/考试查询算下一层，用来决定滑入方向。 */
@@ -559,7 +560,7 @@ public class MainActivity extends Activity {
     }
     void settleWeek(boolean commit){
         final int direction=previewWeek>selectedWeek?1:-1;final float start=weekProgress,end=commit?1:0;
-        if(commit){selectedWeek=previewWeek;updateWeekTitle();}
+        if(commit){Ui.selection(root);selectedWeek=previewWeek;updateWeekTitle();}
         if(!android.animation.ValueAnimator.areAnimatorsEnabled()||weekHost.getWidth()==0){finishWeekTransition();return;}
         weekHost.transitioning=true;weekAnimator=android.animation.ValueAnimator.ofFloat(start,end);
         weekAnimator.setDuration((long)(180+180*Math.abs(end-start)));weekAnimator.setInterpolator(new android.view.animation.PathInterpolator(.22f,1f,.36f,1f));
@@ -583,6 +584,7 @@ public class MainActivity extends Activity {
         if(terms.isEmpty()){sheet.body.addView(label("登录后即可读取教务系统提供的学期。",14,MUTED,false));}
         for(String name:terms){boolean chosen=Term.same(name,forGrades?gradeTerm:selectedTerm);
             TextView choice=themedButton(name+(chosen?"  ✓":""),()->{
+                if(!chosen)Ui.selection(sheet.body);
                 sheet.dialog.dismiss();cancelSync();
                 if(forGrades){gradeTerm=name;prefs.edit().putString("gradeTerm",name).apply();loadGrades();}
                 else{selectedTerm=name;prefs.edit().putString("selectedTerm",name).apply();loadSchedule();}
@@ -786,7 +788,7 @@ public class MainActivity extends Activity {
     }
     int courseColor(Course c){String key="course-color:"+c.name;int index=prefs.getInt(key,-1);if(index<0){index=prefs.getInt("next-course-color",0);prefs.edit().putInt(key,index).putInt("next-course-color",index+1).apply();}return CourseColors.PALETTE[Math.floorMod(index,CourseColors.PALETTE.length)];}
     View weekView(){
-        WeekGridView grid=new WeekGridView(this,dp(33),dp(32),dp(14));grid.setBackground(wallpaper==null?shape(palette.gridSurface,12):new WallpaperDrawable(wallpaper,dp(33),dp(32),palette.gridSurface,palette.wallpaperScrim,prefs.getBoolean("wallpaperUserCrop",false)));
+        WeekGridView grid=new WeekGridView(this,dp(33),dp(32),dp(14));grid.setBackground(wallpaper==null?shape(palette.gridSurface,12):new WallpaperDrawable(wallpaper,dp(33),dp(32),palette.gridSurface,palette.wallpaperScrim));
         String[] days={"一","二","三","四","五","六","日"};LocalDate a=anchor();
         LocalDate monday=a==null?today().minusDays(today().getDayOfWeek().getValue()-1).plusWeeks(selectedWeek-currentWeek()):a.plusWeeks(selectedWeek-1);
         for(int d=1;d<=7;d++){
@@ -813,7 +815,7 @@ public class MainActivity extends Activity {
         return grid;
     }
     void assign(List<Course> group,Map<Course,Integer> lanes,Map<Course,Integer> counts){List<Integer> ends=new ArrayList<>();for(Course c:group){int i=0;while(i<ends.size()&&ends.get(i)>=c.start)i++;if(i==ends.size())ends.add(c.end);else ends.set(i,c.end);lanes.put(c,i);}for(Course c:group)counts.put(c,ends.size());}
-    void detail(Course c){CourseDetailSheet.show(this,c);}
+    void detail(Course c){Ui.tap(root);CourseDetailSheet.show(this,c);}
     boolean saveCustom(List<Course> next){try{customStore.save(next);localCourses=next;render();return true;}catch(Exception e){Toast.makeText(this,"保存失败，原有自定义课程未改动",Toast.LENGTH_LONG).show();return false;}}
     void editCustom(Course existing){if(customReadError){Toast.makeText(this,"原自定义课程文件无法读取，暂时停止写入以免覆盖",Toast.LENGTH_LONG).show();return;}new CourseEditor(this,existing);}
     void showSheet(UiSheet sheet){if(activeSheet!=null)activeSheet.dismiss();activeSheet=sheet.dialog;sheet.dialog.setOnDismissListener(d->{if(activeSheet==sheet.dialog)activeSheet=null;});sheet.show(this);}
@@ -821,7 +823,7 @@ public class MainActivity extends Activity {
     void styleCourseCard(CourseCardView card,int color,int transparency){card.setBackground(shape(CourseAppearance.background(color,transparency),6));card.setAppearance(color,transparency,BG);}
     void showTransparency(){
         UiSheet sheet=new UiSheet(this,"课程透明度","只调整课程底色，文字自动适应背景明暗",.56f);LinearLayout body=sheet.body;int initial=transparency();final int[] value={initial};
-        FrameLayout preview=new FrameLayout(this);preview.setBackground(wallpaper==null?shape(palette.controlSurface,18):new WallpaperDrawable(wallpaper,0,0,BG,palette.wallpaperScrim,prefs.getBoolean("wallpaperUserCrop",false)));preview.setClipToOutline(true);
+        FrameLayout preview=new FrameLayout(this);preview.setBackground(wallpaper==null?shape(palette.controlSurface,18):new WallpaperDrawable(wallpaper,0,0,BG,palette.wallpaperScrim));preview.setClipToOutline(true);
         LinearLayout examples=row();examples.setPadding(dp(16),dp(15),dp(16),dp(15));preview.addView(examples,new FrameLayout.LayoutParams(-1,-1));CourseCardView[] cards=new CourseCardView[3];String[] names={"高等数学\n教学楼 A101","大学英语\n教学楼 B202","自定义课程\n图书馆"};for(int i=0;i<3;i++){CourseCardView c=new CourseCardView(this);c.setText(names[i]);c.setTextSize(12);c.setGravity(Gravity.CENTER);c.setPadding(dp(5),dp(5),dp(5),dp(5));c.setIncludeFontPadding(false);c.setTag(CourseColors.PALETTE[i]);cards[i]=c;styleCourseCard(c,CourseColors.PALETTE[i],initial);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);if(i>0)lp.leftMargin=dp(8);examples.addView(c,lp);}body.addView(preview,new LinearLayout.LayoutParams(-1,dp(116)));space(body,15);
         TextView percent=label("透明度 "+initial+"%",16,INK,true);percent.setGravity(Gravity.CENTER);body.addView(percent,new LinearLayout.LayoutParams(-1,-2));SeekBar slider=new SeekBar(this);slider.setMax(100);slider.setProgress(initial);slider.setProgressTintList(android.content.res.ColorStateList.valueOf(PRIMARY));slider.setThumbTintList(android.content.res.ColorStateList.valueOf(PRIMARY));slider.setContentDescription("课程卡片透明度，百分之零为不透明，百分之一百为底色完全透明");body.addView(slider,new LinearLayout.LayoutParams(-1,dp(44)));
         LinearLayout ends=row();TextView solid=label("不透明",11,MUTED,false),clear=label("全透明",11,MUTED,false);ends.addView(solid,new LinearLayout.LayoutParams(0,-2,1));clear.setGravity(Gravity.RIGHT);ends.addView(clear,new LinearLayout.LayoutParams(0,-2,1));body.addView(ends);space(body,12);

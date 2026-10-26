@@ -4,7 +4,7 @@ import android.content.Context;
 import android.view.View;
 import android.view.ViewGroup;
 
-/** Motion only. Static appearance remains the original v1.1.8 UI. */
+/** Shared motion and touch feedback. */
 public final class Ui {
     private Ui(){}
     public static final long DURATION_FAST=120,DURATION_PAGE=250,DURATION_ENTER=280,DURATION_SLOW=360;
@@ -15,6 +15,15 @@ public final class Ui {
     }
     /** 动画是否可用。系统设置里关掉动画后必须老实不动。 */
     public static boolean animated(){return android.animation.ValueAnimator.areAnimatorsEnabled();}
+
+    /** Use the system's touch feedback, respecting its setting without vibration permissions. */
+    public static void selection(View view){
+        haptic(view,android.os.Build.VERSION.SDK_INT>=34?android.view.HapticFeedbackConstants.SEGMENT_TICK:android.view.HapticFeedbackConstants.CLOCK_TICK);
+    }
+    public static void tap(View view){haptic(view,android.view.HapticFeedbackConstants.CONTEXT_CLICK);}
+    private static void haptic(View view,int effect){
+        if(view!=null&&view.isEnabled()&&view.isHapticFeedbackEnabled())view.performHapticFeedback(effect);
+    }
 
     /** 让一组子视图依次淡入上移。父容器已经布好局才调用。 */
     static boolean isSpacer(int width,int height,int pixel){

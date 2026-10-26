@@ -18,8 +18,8 @@ public final class WallpaperCropActivity extends Activity {
         LinearLayout root=column();root.setBackgroundColor(theme.surface);root.setOnApplyWindowInsetsListener((v,i)->{v.setPadding(i.getSystemWindowInsetLeft(),i.getSystemWindowInsetTop(),i.getSystemWindowInsetRight(),i.getSystemWindowInsetBottom());return i.consumeSystemWindowInsets();});
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(16),dp(12),dp(16),dp(12));header.addView(button("取消",()->onBackPressed()),new LinearLayout.LayoutParams(dp(60),dp(44)));TextView title=text("裁切壁纸",20,theme.text);title.setGravity(Gravity.CENTER);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));apply=button("应用",()->save());apply.setEnabled(false);header.addView(apply,new LinearLayout.LayoutParams(dp(60),dp(44)));root.addView(header);
         FrameLayout preview=new FrameLayout(this);root.addView(preview,new LinearLayout.LayoutParams(-1,0,1));status=text("正在读取图片…",14,theme.muted);status.setGravity(Gravity.CENTER);preview.addView(status,new FrameLayout.LayoutParams(-1,-1));
-        TextView hint=text("拖动图片定位 · 双指缩放\n拖动四角调整范围，自由比例会完整显示",13,theme.muted);hint.setGravity(Gravity.CENTER);hint.setPadding(dp(12),dp(12),dp(12),dp(8));root.addView(hint);
-        tools=column();tools.setPadding(dp(12),0,dp(12),dp(16));LinearLayout modes=new LinearLayout(this);add(modes,"课表比例",()->mode(timetableRatio));add(modes,"自由裁切",()->mode(0));add(modes,"完整原图",()->mode(bitmap.getWidth()/(float)bitmap.getHeight()));tools.addView(modes);
+        TextView hint=text("拖动图片定位 · 双指缩放\n拖动四角调整范围，应用后按课表区域居中铺满",13,theme.muted);hint.setGravity(Gravity.CENTER);hint.setPadding(dp(12),dp(12),dp(12),dp(8));root.addView(hint);
+        tools=column();tools.setPadding(dp(12),0,dp(12),dp(16));LinearLayout modes=new LinearLayout(this);add(modes,"课表比例",()->mode(timetableRatio));add(modes,"自由裁切",()->mode(0));add(modes,"原图比例",()->mode(bitmap.getWidth()/(float)bitmap.getHeight()));tools.addView(modes);
         LinearLayout zoom=new LinearLayout(this);add(zoom,"缩小",()->crop.zoom(.8f));add(zoom,"重置",()->{crop.geometry.reset();crop.invalidate();});add(zoom,"放大",()->crop.zoom(1.25f));tools.addView(zoom);enableTools(false);root.addView(tools);setContentView(root);
         if(getIntent().getData()==null){status.setText("未选择图片，请返回重试");return;}
         worker.execute(()->{
@@ -36,7 +36,7 @@ public final class WallpaperCropActivity extends Activity {
             Bitmap output=null;try{
                 float w=bounds[2]-bounds[0],h=bounds[3]-bounds[1],scale=Math.min(1,1600/Math.max(w,h));int outW=Math.max(1,Math.round(w*scale)),outH=Math.max(1,Math.round(h*scale));output=Bitmap.createBitmap(outW,outH,Bitmap.Config.ARGB_8888);
                 Canvas canvas=new Canvas(output);canvas.drawColor(Color.WHITE);canvas.scale(outW/w,outH/h);canvas.translate(-bounds[0],-bounds[1]);canvas.drawBitmap(source,0,0,new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG));WallpaperStore.save(this,output);
-                getSharedPreferences("settings",MODE_PRIVATE).edit().putBoolean("wallpaperUserCrop",true).putBoolean("manualTheme",false).remove("manualThemeColor").apply();
+                getSharedPreferences("settings",MODE_PRIVATE).edit().remove("wallpaperUserCrop").putBoolean("manualTheme",false).remove("manualThemeColor").apply();
                 handler.post(()->{if(disposed)return;setResult(RESULT_OK);finish();});
             }catch(Exception|OutOfMemoryError e){handler.post(()->{if(disposed)return;saving=false;apply.setText("应用");apply.setEnabled(true);enableTools(true);crop.setEnabled(true);Toast.makeText(this,"保存失败，原壁纸已保留，请重试",Toast.LENGTH_LONG).show();});}
             finally{if(output!=null)output.recycle();}

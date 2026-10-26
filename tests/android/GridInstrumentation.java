@@ -1,6 +1,10 @@
 package cn.jhun.sanjiaohu;
 
 import android.app.Instrumentation;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.RectF;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
@@ -12,6 +16,7 @@ public final class GridInstrumentation extends Instrumentation {
         final Bundle result=new Bundle();
         try {
             runOnMainSync(()->{
+                wallpaperCoverage();
                 for(int[] size:new int[][]{{320,400},{360,520},{1080,1500}}){
                     WeekGridView grid=new WeekGridView(getTargetContext(),25,32);
                     for(int day=1;day<=7;day++)for(int p=1;p<=12;p++){
@@ -27,7 +32,25 @@ public final class GridInstrumentation extends Instrumentation {
                     }
                 }
             });
-            result.putString("stream","PASS: real Android first-pass measurement and layout at 3 sizes");finish(-1,result);
+            result.putString("stream","PASS: real Android first-pass layout and wallpaper edge coverage at changing viewport sizes");finish(-1,result);
         }catch(Throwable error){result.putString("stream","FAIL: "+error);finish(0,result);}
+    }
+    private void wallpaperCoverage(){
+        // A saved portrait crop must cover a shorter uncalibrated timetable and landscape too.
+        Bitmap source=Bitmap.createBitmap(360,640,Bitmap.Config.ARGB_8888);source.eraseColor(Color.CYAN);
+        WallpaperDrawable wallpaper=new WallpaperDrawable(source,33,32,Color.WHITE);
+        try{
+            for(int[] size:new int[][]{{360,640},{360,550},{361,551},{720,320},{320,720}}){
+                int w=size[0],h=size[1];Bitmap output=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+                try{
+                    wallpaper.setBounds(0,0,w,h);wallpaper.draw(new Canvas(output));
+                    for(int y=32;y<h;y++)for(int x=33;x<w;x++){
+                        if(output.getPixel(x,y)!=Color.CYAN)throw new AssertionError("wallpaper gap at "+x+","+y+" in "+w+"x"+h);
+                    }
+                    if(wallpaper.sample(new RectF(w-8,40,w,h-8))!=Color.CYAN)throw new AssertionError("card contrast samples a blank edge");
+                    if(output.getPixel(0,h-1)!=Color.WHITE||output.getPixel(w-1,0)!=Color.WHITE)throw new AssertionError("header/gutter lost");
+                }finally{output.recycle();}
+            }
+        }finally{source.recycle();}
     }
 }
