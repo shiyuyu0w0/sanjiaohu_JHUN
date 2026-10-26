@@ -21,9 +21,26 @@ public class JSONObject {
         map.put(key,value);return this;
     }
     public Object opt(String key){return map.get(key);}
+    public int optInt(String key){return optInt(key,0);}
+    public int optInt(String key,int fallback){
+        Object v=map.get(key);
+        if(v instanceof Number)return ((Number)v).intValue();
+        try{return (int)Double.parseDouble(String.valueOf(v));}catch(NumberFormatException e){return fallback;}
+    }
+    public long optLong(String key){return optLong(key,0);}
+    public long optLong(String key,long fallback){
+        Object v=map.get(key);
+        if(v instanceof Number)return ((Number)v).longValue();
+        try{return (long)Double.parseDouble(String.valueOf(v));}catch(NumberFormatException e){return fallback;}
+    }
     public Object get(String key)throws JSONException{
         if(!map.containsKey(key))throw new JSONException("missing key: "+key);
         return map.get(key);
+    }
+    public String getString(String key)throws JSONException{
+        Object value=get(key);
+        if(value==null)throw new JSONException("not a string: "+key);
+        return String.valueOf(value);
     }
     public Object remove(String key){return map.remove(key);}
     public JSONObject getJSONObject(String key)throws JSONException{

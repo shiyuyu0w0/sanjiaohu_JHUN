@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 打开新页面：新页从右侧滑入并淡入，轻微放大收住。 -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:interpolator/fast_out_slow_in"
+    android:shareInterpolator="true">
+    <translate android:fromXDelta="22%" android:toXDelta="0%" android:duration="280"/>
+    <alpha android:fromAlpha="0" android:toAlpha="1" android:duration="200"/>
+    <scale
+        android:fromXScale="0.97" android:toXScale="1"
+        android:fromYScale="0.97" android:toYScale="1"
+        android:pivotX="50%p" android:pivotY="50%p"
+        android:duration="280"/>
+</set>

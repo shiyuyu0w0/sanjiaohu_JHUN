@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     final java.util.concurrent.ExecutorService authIo=java.util.concurrent.Executors.newSingleThreadExecutor();
     FrameLayout root;
     LinearLayout screen;
+    LinearLayout pageContent,outgoing,outgoingContent;
     android.animation.ValueAnimator pageAnimator;
     android.animation.ValueAnimator weekAnimator;
     WeekSwipeLayout weekHost;
@@ -125,8 +126,8 @@ public class MainActivity extends Activity {
     @Override protected void onStart(){super.onStart();inBackground=false;selectedWeek=currentWeek();render();handler.removeCallbacks(examClock);if(page==4)handler.postDelayed(examClock,30000);if(prefs.getBoolean("loginCompleted",false)||canAutoLogin())sync();}
     @Override protected void onResume(){super.onResume();updateBadge();UpdateStore.check(getApplicationContext(),false,error->handler.post(()->{if(!isDestroyed())updateBadge();}));}
     void updateBadge(){if(updateDot!=null)updateDot.setVisibility(new UpdateStore(this).available(this)?View.VISIBLE:View.GONE);}
-    @Override protected void onStop(){finishWeekTransition();super.onStop();if(pageAnimator!=null)pageAnimator.cancel();if(moreMenu!=null)moreMenu.dismiss();inBackground=true;verified=false;automaticCredentials=null;autoRunning=false;if(busy){generation++;busy=false;web.stopLoading();setState("本地课表 · 返回应用时重新同步");}CookieManager.getInstance().flush();}
-    @Override protected void onDestroy(){finishWeekTransition();if(pageAnimator!=null)pageAnimator.cancel();if(activeSheet!=null)activeSheet.dismiss();if(loginFailureDialog!=null)loginFailureDialog.dismiss();if(qrSessionExpiredDialog!=null)qrSessionExpiredDialog.dismiss();handler.removeCallbacksAndMessages(null);authIo.shutdown();web.destroy();super.onDestroy();}
+    @Override protected void onStop(){finishWeekTransition();super.onStop();if(pageAnimator!=null)pageAnimator.cancel();dropOutgoing();if(moreMenu!=null)moreMenu.dismiss();inBackground=true;verified=false;automaticCredentials=null;autoRunning=false;if(busy){generation++;busy=false;web.stopLoading();setState("本地课表 · 返回应用时重新同步");}CookieManager.getInstance().flush();}
+    @Override protected void onDestroy(){finishWeekTransition();if(pageAnimator!=null)pageAnimator.cancel();dropOutgoing();if(activeSheet!=null)activeSheet.dismiss();if(loginFailureDialog!=null)loginFailureDialog.dismiss();if(qrSessionExpiredDialog!=null)qrSessionExpiredDialog.dismiss();handler.removeCallbacksAndMessages(null);authIo.shutdown();web.destroy();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putBoolean("todayLabel",todayLabel);out.putFloat("wallpaperAspect",wallpaperAspect);}
     @Override public void onConfigurationChanged(android.content.res.Configuration c){super.onConfigurationChanged(c);render();if(activeSheet!=null)activeSheet.getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels,dp(560)),-1);}
     String read(InputStream in)throws IOException {try(InputStream input=in; ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=input.read(b))!=-1)out.write(b,0,n);return out.toString("UTF-8");}}
@@ -348,19 +349,43 @@ public class MainActivity extends Activity {
     int currentWeek(){LocalDate a=anchor();if(a==null)return 1;long w=ChronoUnit.DAYS.between(a,today())/7+1;if(today().isBefore(a))return 1;return (int)Math.max(1,Math.min(maxWeek(),w));}
     void calibrate(){new CalibrationSheet(this);}
     void switchPage(int target){if(target==page)return;if(page==4)cancelSync();handler.removeCallbacks(examClock);transitionFrom=page;page=target;render();transitionFrom=-1;if(page==4)handler.postDelayed(examClock,30000);}
+    /** 底栏三个标签里的下标；成绩/考试查询折回「首页」那一格。 */
+    static int tabOf(int page){return page>=3?0:page;}
+    /** 层级：底栏三页是 0，成绩/考试查询算下一层，用来决定滑入方向。 */
+    static int depthOf(int page){return page>=3?1:0;}
+    /**
+     * 切页方向。+1 表示新内容从右边进来（前进），-1 表示从左边进来（返回）。
+     *
+     * 旧版把成绩/考试查询都折成 tab 0 再比大小，首页→成绩算出来 from==to，
+     * 于是方向是 0、位移也是 0，等于没动画。这里先比层级，同层再比标签顺序。
+     */
+    static int directionBetween(int from,int to){
+        if(depthOf(to)!=depthOf(from))return depthOf(to)>depthOf(from)?1:-1;
+        int a=tabOf(from),b=tabOf(to);
+        return b==a?(to>from?1:-1):(b>a?1:-1);
+    }
+    /** 切页动画进行中屏蔽点击：两棵视图树短暂共存，避免点到正在退场的那棵。 */
+    @Override public boolean dispatchTouchEvent(MotionEvent event){
+        if(pageAnimator!=null&&pageAnimator.isRunning())return true;
+        return super.dispatchTouchEvent(event);
+    }
     void render(){
         finishWeekTransition();weekHost=null;
         if(pageAnimator!=null){pageAnimator.cancel();pageAnimator=null;}
+        dropOutgoing();
         visibleCards.clear();selectedWeek=Math.max(1,Math.min(selectedWeek,maxWeek()));
         if(moreMenu!=null && moreMenu.isShowing())moreMenu.dismiss();
         root.setBackgroundColor(BG);AppTheme.applySystemBars(this,palette);
-        if(screen!=null)root.removeView(screen);authStatusText=null;
+        boolean animate=transitionFrom>=0&&screen!=null&&Ui.animated();
+        if(animate){outgoing=screen;outgoingContent=pageContent;outgoing.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);}
+        else if(screen!=null)root.removeView(screen);
+        authStatusText=null;
         screen=column();screen.setPadding(dp(10),dp(3),dp(10),dp(3));root.addView(screen,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout mast=row();mast.setMinimumHeight(dp(48));LinearLayout brand=column();brand.addView(label(page==4?"考试查询":page==3?"成绩":page==2?"个人":"三角狐",25,INK,true));mast.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
         updateDot=null;if(page==2){FrameLayout about=new FrameLayout(this);about.addView(iconButton("关于",16,()->startActivity(new Intent(this,AboutActivity.class))),new FrameLayout.LayoutParams(dp(48),dp(48)));updateDot=label("●",11,palette.error,true);updateDot.setContentDescription("有新版本");FrameLayout.LayoutParams dotSize=new FrameLayout.LayoutParams(dp(14),dp(14),Gravity.TOP|Gravity.RIGHT);dotSize.topMargin=dp(3);about.addView(updateDot,dotSize);mast.addView(about,new LinearLayout.LayoutParams(dp(48),dp(48)));updateBadge();}
         if(page==3||page==4)mast.addView(themedButton("返回首页",()->switchPage(0),false),new LinearLayout.LayoutParams(-2,dp(40)));
         if(page==1){TextView menu=label("⋮",28,ACCENT_TEXT,true);menu.setGravity(Gravity.CENTER);menu.setContentDescription("更多选项");menu.setFocusable(true);menu.setOnClickListener(v->showMenu(v));mast.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48)));}screen.addView(mast);
-        LinearLayout pageContent=column();screen.addView(pageContent,new LinearLayout.LayoutParams(-1,0,1));
+        pageContent=column();pageContent.setClipChildren(true);screen.addView(pageContent,new LinearLayout.LayoutParams(-1,0,1));
         if(page==1||page==3||page==4){
             String termName=page==4?(examTerm.isEmpty()?"学校当前学期":examTerm):page==3?(gradeTerm.isEmpty()?"选择学期":gradeTerm):(selectedTerm.isEmpty()?"选择学期":selectedTerm);
             pageContent.addView(semesterControl(termName,page==4?"选择考试学期":"选择学期",()->{if(page==4)chooseExamTerm();else chooseSemester(page==3);}),new LinearLayout.LayoutParams(-1,dp(44)));
@@ -381,15 +406,56 @@ public class MainActivity extends Activity {
         stateText=label(page==4?examState:page==3?gradeState:state,10,MUTED,false);stateText.setPadding(dp(2),dp(5),dp(2),dp(4));stateText.setMaxLines(2);screen.addView(stateText);
         LinearLayout nav=row();nav.setPadding(dp(5),dp(3),dp(5),dp(3));nav.setBackground(shape(palette.sheetSurface,22));
         final GradientDrawable[] tabBackgrounds=new GradientDrawable[3];final MoreMenu.Icon[] tabIcons=new MoreMenu.Icon[3];final TextView[] tabLabels=new TextView[3];
-        String[] titles={"首页","课程","个人"};for(int i=0;i<3;i++){
-            final int target=i;boolean selected=(page>=3?0:page)==i;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(3),0,dp(3));item.setBaselineAligned(false);tabBackgrounds[i]=shape(selected?palette.selectedSurface:Color.TRANSPARENT,16);item.setBackground(tabBackgrounds[i]);
+        final int selectedTab=tabOf(page);String[] titles={"首页","课程","个人"};for(int i=0;i<3;i++){
+            final int target=i;boolean selected=(page>=3?0:page)==i;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(3),0,dp(3));item.setBaselineAligned(false);tabBackgrounds[i]=shape(selected?palette.selectedSurface:Color.TRANSPARENT,16);item.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((PRIMARY&0xffffff)|0x26000000),tabBackgrounds[i],shape(palette.rippleMask,16)));
             MoreMenu.Icon icon=new MoreMenu.Icon(this,i+2,selected?INK:MUTED);item.addView(icon,new LinearLayout.LayoutParams(dp(32),dp(30)));TextView navLabel=label(titles[i],11,selected?INK:MUTED,selected);navLabel.setGravity(Gravity.CENTER);navLabel.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);navLabel.setIncludeFontPadding(false);navLabel.setSingleLine(true);item.addView(navLabel,new LinearLayout.LayoutParams(-1,dp(18)));item.setSelected(selected);item.setContentDescription(titles[i]+(selected?"，已选中":""));item.setFocusable(true);tabIcons[i]=icon;tabLabels[i]=navLabel;item.setOnClickListener(v->switchPage(target));nav.addView(item,new LinearLayout.LayoutParams(0,dp(54),1));
         }screen.addView(nav,new LinearLayout.LayoutParams(-1,dp(60)));
-        if(transitionFrom>=0&&android.animation.ValueAnimator.areAnimatorsEnabled()){
-            final int from=transitionFrom>=3?0:transitionFrom,to=page>=3?0:page;final int selectedColor=palette.selectedSurface;final float offset=dp(10)*(to>from?1:-1);
-            android.animation.ArgbEvaluator evaluator=new android.animation.ArgbEvaluator();pageAnimator=android.animation.ValueAnimator.ofFloat(0,1);pageAnimator.setDuration(200);pageAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
-            pageAnimator.addUpdateListener(animation->{float t=(Float)animation.getAnimatedValue();pageContent.setAlpha(.2f+.8f*t);pageContent.setTranslationX(offset*(1-t));for(int i=0;i<3;i++){tabBackgrounds[i].setColor((Integer)evaluator.evaluate(t,i==from?selectedColor:selectedColor&0xffffff,i==to?selectedColor:selectedColor&0xffffff));int color=(Integer)evaluator.evaluate(t,i==from?INK:MUTED,i==to?INK:MUTED);tabIcons[i].setColor(color);tabLabels[i].setTextColor(color);}});pageAnimator.start();
+        if(animate){
+            final int from=tabOf(transitionFrom),to=selectedTab;
+            final int direction=directionBetween(transitionFrom,page);
+            final int selectedColor=palette.selectedSurface;
+            final float travel=dp(28);
+            final LinearLayout leaving=outgoing,leavingContent=outgoingContent;
+            final LinearLayout enteringContent=pageContent;
+            final View leavingMast=leaving.getChildAt(0);
+            final View enteringMast=mast;
+            // 淡出淡入错开：前 45% 旧内容退，后 55% 新内容进，两段不重叠才不会糊成一团。
+            pageContent.setAlpha(0);pageContent.setTranslationX(travel*direction);
+            enteringMast.setAlpha(0);
+            if(leavingContent!=null)leavingContent.setLayerType(View.LAYER_TYPE_HARDWARE,null);
+            pageContent.setLayerType(View.LAYER_TYPE_HARDWARE,null);
+            android.animation.ArgbEvaluator evaluator=new android.animation.ArgbEvaluator();
+            pageAnimator=android.animation.ValueAnimator.ofFloat(0,1);
+            pageAnimator.setDuration(Ui.DURATION_PAGE);pageAnimator.setInterpolator(Ui.easing());
+            pageAnimator.addUpdateListener(animation->{
+                float t=(Float)animation.getAnimatedValue();
+                float out=Math.min(1,t/.45f),in=Math.max(0,(t-.45f)/.55f);
+                if(leavingContent!=null){leavingContent.setAlpha(1-out);leavingContent.setTranslationX(-travel*direction*out);}
+                leavingMast.setAlpha(1-out);
+                enteringContent.setAlpha(in);enteringContent.setTranslationX(travel*direction*(1-in));
+                enteringMast.setAlpha(in);
+                for(int i=0;i<3;i++){
+                    tabBackgrounds[i].setColor((Integer)evaluator.evaluate(t,i==from?selectedColor:selectedColor&0xffffff,i==to?selectedColor:selectedColor&0xffffff));
+                    int color=(Integer)evaluator.evaluate(t,i==from?INK:MUTED,i==to?INK:MUTED);
+                    tabIcons[i].setColor(color);tabLabels[i].setTextColor(color);
+                }
+            });
+            pageAnimator.addListener(new android.animation.AnimatorListenerAdapter(){
+                @Override public void onAnimationEnd(android.animation.Animator a){
+                    if(outgoing==leaving)dropOutgoing();else root.removeView(leaving);
+                    enteringContent.setLayerType(View.LAYER_TYPE_NONE,null);
+                    enteringContent.setAlpha(1);enteringContent.setTranslationX(0);enteringMast.setAlpha(1);
+                    pageAnimator=null;
+                }
+            });
+            pageAnimator.start();
+            // 底栏图标在换页那一刻回弹一下，手指离开时能看到反馈。
+            if(to!=from)Ui.pop(tabIcons[to]);
         }
+    }
+    /** 摘掉上一次切页留下的那棵退场视图树。 */
+    void dropOutgoing(){
+        if(outgoing!=null){root.removeView(outgoing);outgoing=null;outgoingContent=null;}
     }
     @Override public void onBackPressed(){if(page>=3){switchPage(0);return;}super.onBackPressed();}
     void updateWeekTitle(){
@@ -434,6 +500,8 @@ public class MainActivity extends Activity {
             View current=weekHost.getChildAt(commit?weekHost.getChildCount()-1:0);
             for(int i=weekHost.getChildCount()-1;i>=0;i--)if(weekHost.getChildAt(i)!=current)weekHost.removeViewAt(i);
             if(previewWeek!=0&&!commit){visibleCards.clear();visibleCards.addAll(previousCards);}
+            // 可能还挂着边界橡皮筋的回弹，先掐掉再归位，否则它会跟新的翻周动画抢同一个 translationX。
+            current.animate().cancel();
             current.setTranslationX(0);current.setAlpha(1);current.setScaleX(1);current.setScaleY(1);current.setLayerType(View.LAYER_TYPE_NONE,null);current.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
         }
         previewWeek=0;queuedWeek=0;weekProgress=0;previousCards.clear();
@@ -454,21 +522,39 @@ public class MainActivity extends Activity {
     }
     void moveWeek(float progress,int direction){
         weekProgress=progress;if(weekHost==null||weekHost.getChildCount()<2)return;
-        float distance=weekHost.getWidth()*direction;View old=weekHost.getChildAt(0),next=weekHost.getChildAt(1);
-        old.setTranslationX(-distance*progress);next.setTranslationX(distance*(1-progress));
-        old.setAlpha(1-.12f*progress);next.setAlpha(.88f+.12f*progress);
+        float width=weekHost.getWidth();View old=weekHost.getChildAt(0),next=weekHost.getChildAt(1);
+        // 进场页跟满手指，退场页慢半拍并略微缩小。两者的速度差就是纵深，
+        // 缩放量由 WeekSwipeGesture.seam 兜着，保证中间不会漏出背景。
+        old.setTranslationX(WeekSwipeGesture.trailOffset(progress,width,direction));
+        old.setScaleX(WeekSwipeGesture.trailScale(progress));old.setScaleY(WeekSwipeGesture.trailScale(progress));
+        old.setAlpha(WeekSwipeGesture.trailAlpha(progress));
+        next.setTranslationX(WeekSwipeGesture.leadOffset(progress,width,direction));
+        next.setAlpha(WeekSwipeGesture.leadAlpha(progress));
     }
     void dragWeek(float offset){
         if(anchor()==null||weekHost==null||weekAnimator!=null||!android.animation.ValueAnimator.areAnimatorsEnabled())return;
         int direction=offset<0?1:-1,target=WeekSwipeGesture.target(selectedWeek,selectedWeek+direction,maxWeek());
         if(previewWeek!=0&&previewWeek!=target)finishWeekTransition();
-        if(target==selectedWeek){weekHost.getChildAt(0).setTranslationX(Math.max(-dp(24),Math.min(dp(24),offset*.15f)));return;}
+        // 第一周/最后一周继续拖：橡皮筋收着，越拖越钝，比旧版直接截在 24dp 自然。
+        if(target==selectedWeek){weekHost.getChildAt(0).setTranslationX(WeekSwipeGesture.rubberBand(offset,dp(22)));return;}
         if(previewWeek==0)prepareWeek(target);
         moveWeek(Math.min(.98f,Math.abs(offset)/Math.max(1,weekHost.getWidth())),direction);
     }
     void releaseWeek(int direction){
         if(anchor()==null||weekHost==null||weekAnimator!=null)return;
-        if(previewWeek==0){finishWeekTransition();if(direction!=0)changeWeek(selectedWeek+direction);return;}
+        if(previewWeek==0){
+            View held=weekHost.getChildCount()>0?weekHost.getChildAt(0):null;
+            float offset=held==null?0:held.getTranslationX();
+            finishWeekTransition();
+            if(direction!=0)changeWeek(selectedWeek+direction);
+            // 没真的翻周（边界或位移不够），把橡皮筋弹回去。finishWeekTransition 已经清零，
+            // 这里先放回原位再动画；weekAnimator 非空说明切周动画接手了，就别插手。
+            if(offset!=0&&weekAnimator==null&&held!=null&&held.getParent()==weekHost&&Ui.animated()){
+                held.setTranslationX(offset);
+                held.animate().translationX(0).setDuration(Ui.DURATION_FAST*2).setInterpolator(Ui.easing()).start();
+            }
+            return;
+        }
         settleWeek(direction!=0&&Integer.signum(previewWeek-selectedWeek)==direction);
     }
     void settleWeek(boolean commit){
@@ -539,7 +625,7 @@ public class MainActivity extends Activity {
             card.addView(label("地点 · "+(e.room.isEmpty()?"待公布":e.room),13,MUTED,false));space(card,7);card.addView(label("座位 · "+(e.seat.isEmpty()||e.seat.matches("\\*+")?"待公布":e.seat),12,MUTED,false));
             if(!e.note.isEmpty()){space(card,7);card.addView(label("备注 · "+e.note,12,MUTED,false));}content.addView(card);space(content,11);
         }
-        updateExamBadges();space(content,8);content.addView(label("考试安排以学校最新发布为准；倒计时按北京时间计算。",11,MUTED,false));return content;
+        updateExamBadges();space(content,8);content.addView(label("考试安排以学校最新发布为准；倒计时按北京时间计算。",11,MUTED,false));Ui.stagger(content,0);return content;
     }
     void updateExamBadges(){
         ZonedDateTime now=ZonedDateTime.now(Exams.ZONE);
@@ -571,6 +657,7 @@ public class MainActivity extends Activity {
             if(!entry.note.isEmpty()){space(card,7);card.addView(label("备注 · "+entry.note,12,INK,false));}
             content.addView(card);space(content,10);
         }
+        Ui.stagger(content,0);
         return content;
     }
     String displayValue(String value){return value==null||value.trim().isEmpty()?"—":value;}
@@ -624,6 +711,7 @@ public class MainActivity extends Activity {
         HomeEntryGrid grid=new HomeEntryGrid(this,dp(HOME_ENTRY_GAP),dp(112));
         for(int i=0;i<titles.length;i++)grid.addView(homeEntry(titles[i],subtitles[i],icons[i],actions[i]),new android.view.ViewGroup.LayoutParams(-2,-2));
         content.addView(grid,new LinearLayout.LayoutParams(-1,-2));
+        Ui.stagger(content,0);
         return content;
     }
 
@@ -645,6 +733,7 @@ public class MainActivity extends Activity {
         if(customReadError)content.addView(label("自定义课程文件读取失败，原文件已保留。",13,MUTED,false));
         else if(localCourses.isEmpty()){TextView empty=label("还没有自定义课程\n点击下方按钮，添加一门课程。",14,MUTED,false);empty.setGravity(Gravity.CENTER);empty.setLineSpacing(dp(8),1);empty.setPadding(0,dp(35),0,dp(35));content.addView(empty);}
         for(Course c:localCourses){LinearLayout item=panel();item.setPadding(dp(16),dp(13),dp(16),dp(13));LinearLayout title=row();View swatch=new View(this);swatch.setBackground(shape(courseColor(c),4));title.addView(swatch,new LinearLayout.LayoutParams(dp(7),dp(28)));TextView name=label(c.name,16,INK,true);name.setPadding(dp(10),0,0,0);title.addView(name);item.addView(title);space(item,8);item.addView(label("周"+"一二三四五六日".charAt(c.day-1)+" · "+c.start+"–"+c.end+" 节 · "+c.weekText+" 周",12,MUTED,false));item.addView(label((c.term.equals("*")?"所有学期":c.term)+(c.room.isEmpty()?"":" · "+c.room),12,MUTED,false));item.setOnClickListener(v->{sheet.dialog.dismiss();detail(c);});item.setFocusable(true);item.setContentDescription(c.name+"，自定义课程，点按管理");content.addView(item);space(content,10);}
+        Ui.stagger(content,0);
         sheet.actions(this,"＋ 添加课程",()->{sheet.dialog.dismiss();editCustom(null);});showSheet(sheet);
     }
     String authStatus(){if(credentialBusy)return "正在处理本机凭证…";if(autoRunning)return "正在自动登录…";if(verified)return "已登录 · 教务连接正常";if(authServiceUnavailable)return busy?"正在重新连接教务…":"教务暂时无法连接 · 可稍后刷新重试";if(prefs.getBoolean("autoBlocked",false))return qrLogin()?"扫码会话已失效 · 建议密码登录":"需要重新登录或验证码";if(prefs.getBoolean("loginCompleted",false))return busy?"登录状态验证中…":"登录状态待联网验证";return "未登录";}
@@ -665,7 +754,7 @@ public class MainActivity extends Activity {
         identityAutomatic.setOnCheckedChangeListener((v,enabled)->{if(enabled&&(!savedIdentity||!identityPrefs.getBoolean("completed",false))){identityAutomatic.setChecked(false);openIdentity(false);}else identityPrefs.edit().putBoolean("autoLogin",enabled).apply();});space(identity,10);
         identity.addView(label(savedIdentity?"统一认证凭证已单独加密保存在本机。":"登录时可选择保存凭证，方便下次使用。",12,MUTED,false));space(identity,14);
         identity.addView(themedButton("清除统一认证登录与凭证",()->clearIdentityPrompt(),false),new LinearLayout.LayoutParams(-1,dp(48)));content.addView(identity);space(content,16);
-        content.addView(label("课表与自定义课程保存在本机，离线可查看。",12,MUTED,false));return content;
+        content.addView(label("课表与自定义课程保存在本机，离线可查看。",12,MUTED,false));Ui.stagger(content,0);return content;
     }
     void openIdentity(boolean repair){if(identityBusy)return;Intent intent=new Intent(this,IdentityActivity.class);intent.putExtra("repair",repair);startActivity(intent);}
     void openElectricity(){if(identityBusy)return;startActivity(new Intent(this,IdentityActivity.class).putExtra("electricity",true));}
