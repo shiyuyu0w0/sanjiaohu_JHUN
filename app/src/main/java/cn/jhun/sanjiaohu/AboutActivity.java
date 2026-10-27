@@ -33,12 +33,17 @@ public final class AboutActivity extends Activity {
     static final String[] SUPPORT={"GuangG","yy792e"};
     ThemePalette theme;
     UpdatePrompt updatePrompt;
+    boolean historyExpanded;
+    LinearLayout updateHistory,historyToggle;
+    TextView historyLabel;
+    View historyArrow;
     @Override protected void onResume(){super.onResume();if(updatePrompt!=null)updatePrompt.resume();}
     @Override protected void onPause(){if(updatePrompt!=null)updatePrompt.pause();super.onPause();}
     @Override protected void onDestroy(){if(updatePrompt!=null)updatePrompt.destroy();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);if(updatePrompt!=null)updatePrompt.save(state);}
+    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putBoolean("historyExpanded",historyExpanded);if(updatePrompt!=null)updatePrompt.save(state);}
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
+        historyExpanded=saved!=null&&saved.getBoolean("historyExpanded",false);
         theme=AppTheme.from(this,getSharedPreferences("settings",MODE_PRIVATE).getInt("themeColor",0xff2ecbff));
         AppTheme.applySystemBars(this,theme);
         LinearLayout root=column();root.setBackgroundColor(theme.surface);
@@ -59,7 +64,22 @@ public final class AboutActivity extends Activity {
         TextView updateEntry=text("检查更新",12,theme.deepAccent,true);updateEntry.setGravity(Gravity.CENTER);updateEntry.setSingleLine(true);updateEntry.setPadding(dp(10),dp(7),dp(10),dp(7));updateEntry.setMinHeight(dp(36));updateEntry.setFocusable(true);updateEntry.setBackground(new RippleDrawable(ColorStateList.valueOf((theme.primary&0xffffff)|0x22000000),shape(theme.controlSurface,12),shape(theme.rippleMask,12)));LinearLayout.LayoutParams updateSize=new LinearLayout.LayoutParams(-2,-2);updateSize.rightMargin=dp(10);version.addView(updateEntry,updateSize);updatePrompt=new UpdatePrompt(this,theme,updateEntry,saved);updateEntry.setOnClickListener(v->updatePrompt.check());
         version.addView(text(current.startsWith("v")?current:"v"+current,18,theme.deepAccent,true));content.addView(version);gap(content,16);
         LinearLayout updates=card();TextView updatesTitle=text("更新内容",22,theme.deepAccent,true);updatesTitle.setGravity(Gravity.CENTER);updates.addView(updatesTitle,new LinearLayout.LayoutParams(-1,-2));
-        for(int i=0;i<UPDATES.length;i++){String[] entry=UPDATES[i];if(i>0)gap(updates,18);updates.addView(text(entry[0],16,theme.deepAccent,true),new LinearLayout.LayoutParams(-1,-2));TextView body=text(entry[1],13,ThemePalette.readable(theme.text,theme.entrySurface,7),false);body.setLineSpacing(dp(5),1);body.setPadding(0,dp(9),0,0);updates.addView(body,new LinearLayout.LayoutParams(-1,-2));}
+        String currentVersion=current.startsWith("v")?current:"v"+current;
+        boolean foundCurrent=false;gap(updates,16);
+        updateHistory=column();
+        for(String[] entry:UPDATES){
+            if(entry[0].equals(currentVersion)){addUpdate(updates,entry);foundCurrent=true;}
+            else{gap(updateHistory,18);addUpdate(updateHistory,entry);}
+        }
+        if(!foundCurrent)updates.addView(text("暂无当前版本的更新说明",13,theme.text,false));
+        if(updateHistory.getChildCount()>0){
+            gap(updates,16);historyToggle=new LinearLayout(this);historyToggle.setGravity(Gravity.CENTER_VERTICAL);historyToggle.setPadding(dp(14),dp(10),dp(14),dp(10));historyToggle.setMinimumHeight(dp(44));historyToggle.setFocusable(true);
+            historyToggle.setBackground(new RippleDrawable(ColorStateList.valueOf((theme.primary&0xffffff)|0x22000000),shape(theme.controlSurface,12),shape(theme.rippleMask,12)));
+            historyLabel=text("",14,theme.deepAccent,true);historyToggle.addView(historyLabel,new LinearLayout.LayoutParams(0,-2,1));
+            historyArrow=new AppIcons.Glyph(this,R.drawable.ic_ui_down,theme.deepAccent,18);historyArrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);historyToggle.addView(historyArrow,new LinearLayout.LayoutParams(dp(24),dp(24)));
+            historyToggle.setOnClickListener(v->{Ui.tap(v);historyExpanded=!historyExpanded;showHistory();if(historyExpanded)Ui.enter(updateHistory,0,dp(4));});
+            updates.addView(historyToggle,new LinearLayout.LayoutParams(-1,-2));updates.addView(updateHistory,new LinearLayout.LayoutParams(-1,-2));showHistory();
+        }
         content.addView(updates);gap(content,16);
         LinearLayout support=card();support.setBackground(shape(theme.entrySurface,24));
         TextView supportTitle=text("技术支持",22,theme.deepAccent,true);supportTitle.setGravity(Gravity.CENTER);support.addView(supportTitle,new LinearLayout.LayoutParams(-1,-2));
@@ -68,6 +88,16 @@ public final class AboutActivity extends Activity {
         content.addView(support);gap(content,16);
         setContentView(root);
         Ui.stagger(content,0);
+    }
+    void addUpdate(LinearLayout parent,String[] entry){
+        parent.addView(text(entry[0],16,theme.deepAccent,true),new LinearLayout.LayoutParams(-1,-2));
+        TextView body=text(entry[1],13,ThemePalette.readable(theme.text,theme.entrySurface,7),false);body.setLineSpacing(dp(5),1);body.setPadding(0,dp(9),0,0);parent.addView(body,new LinearLayout.LayoutParams(-1,-2));
+    }
+    void showHistory(){
+        updateHistory.animate().cancel();updateHistory.setAlpha(1);updateHistory.setTranslationY(0);updateHistory.setVisibility(historyExpanded?View.VISIBLE:View.GONE);
+        String label=historyExpanded?"收起历史更新":"展开历史更新";historyLabel.setText(label);historyToggle.setContentDescription(label);
+        if(android.os.Build.VERSION.SDK_INT>=30)historyToggle.setStateDescription(historyExpanded?"已展开":"已收起");
+        historyArrow.setRotation(historyExpanded?180:0);
     }
     LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
     LinearLayout card(){LinearLayout v=column();v.setPadding(dp(20),dp(20),dp(20),dp(20));v.setBackground(shape(theme.entrySurface,24));return v;}
