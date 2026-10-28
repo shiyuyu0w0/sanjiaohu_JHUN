@@ -9,7 +9,8 @@ import org.json.JSONObject;
 /** Each semester and data type has its own atomic cache. */
 final class AcademicStore {
     private final File directory;
-    AcademicStore(Context context){directory=context.getFilesDir();}
+    private final Context context;
+    AcademicStore(Context context){this.context=context.getApplicationContext();directory=context.getFilesDir();}
     private AtomicFile file(String kind,String term){if(!kind.equals("schedule")&&!kind.equals("grades")&&!kind.equals("summary")&&!kind.equals("exams"))throw new IllegalArgumentException();return new AtomicFile(new File(directory,kind+"-"+(kind.equals("summary")?"all":Term.key(term))+".json"));}
     JSONObject load(String kind,String term)throws Exception{
         JSONObject data=new JSONObject(new String(file(kind,term).readFully(),StandardCharsets.UTF_8));
@@ -46,13 +47,13 @@ final class AcademicStore {
     private void commitSchedule(JSONObject fresh)throws Exception{
         new Schedule(fresh);JSONObject state=snapshots(fresh.getString("term")),active=state.optJSONObject("active");
         String hash=ScheduleRevision.fingerprint(fresh);if(active!=null&&!ScheduleRevision.fingerprint(active).equals(hash))state.put("previous",active);
-        fresh.put("fingerprint",hash);state.put("active",fresh).put("checkedAt",System.currentTimeMillis());state.remove("candidate");writeSnapshots(state);
+        fresh.put("fingerprint",hash);state.put("active",fresh).put("checkedAt",System.currentTimeMillis());state.remove("candidate");writeSnapshots(state);TodayWidgetProvider.refresh(context);
     }
     void acceptSchedule(String term,String fingerprint)throws Exception{
         JSONObject candidate=scheduleSnapshot(term,"candidate");if(candidate==null||!ScheduleRevision.fingerprint(candidate).equals(fingerprint))throw new IOException("候选课表已变化，请重新查看");commitSchedule(candidate);
     }
     void discardSchedule(String term)throws Exception{JSONObject state=snapshots(term);state.remove("candidate");writeSnapshots(state);}
     void restoreSchedule(String term)throws Exception{
-        JSONObject state=snapshots(term),previous=scheduleSnapshot(term,"previous");if(previous==null)throw new IOException("尚无上一份课表");JSONObject active=state.optJSONObject("active");state.put("active",previous).put("previous",active);state.remove("candidate");writeSnapshots(state);
+        JSONObject state=snapshots(term),previous=scheduleSnapshot(term,"previous");if(previous==null)throw new IOException("尚无上一份课表");JSONObject active=state.optJSONObject("active");state.put("active",previous).put("previous",active);state.remove("candidate");writeSnapshots(state);TodayWidgetProvider.refresh(context);
     }
 }

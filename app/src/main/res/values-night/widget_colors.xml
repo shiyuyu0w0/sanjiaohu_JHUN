@@ -1,0 +1,11 @@
+<resources>
+    <color name="widget_surface">#20272C</color>
+    <color name="widget_date_surface">#293D42</color>
+    <color name="widget_course_surface">#2B343B</color>
+    <color name="widget_text">#EDF3F6</color>
+    <color name="widget_muted">#A8BBC5</color>
+    <color name="widget_accent">#7FD3DA</color>
+    <color name="widget_pending">#50939E</color>
+    <color name="widget_done">#5B6D77</color>
+    <color name="widget_divider">#3B484F</color>
+</resources>

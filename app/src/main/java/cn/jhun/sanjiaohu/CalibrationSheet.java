@@ -12,7 +12,7 @@ final class CalibrationSheet {
     CalibrationSheet(MainActivity activity){
         a=activity;anchorKey=a.anchorKey();selected=a.anchor();month=YearMonth.from(selected==null?a.today():selected);yearStart=month.getYear()-5;
         sheet=new UiSheet(a,"周次校准",a.activeSchedule().term,.84f);
-        sheet.actions(a,"保存校准",()->{if(selected==null){Toast.makeText(a,"请先点选开学第一周",Toast.LENGTH_SHORT).show();return;}a.prefs.edit().putString(anchorKey,selected.toString()).apply();a.selectedWeek=a.currentWeek();sheet.dialog.dismiss();a.render();});draw();a.showSheet(sheet);
+        sheet.actions(a,"保存校准",()->{if(selected==null){Toast.makeText(a,"请先点选开学第一周",Toast.LENGTH_SHORT).show();return;}a.prefs.edit().putString(anchorKey,selected.toString()).apply();a.selectedWeek=a.currentWeek();sheet.dialog.dismiss();a.render();TodayWidgetProvider.refresh(a);});draw();a.showSheet(sheet);
     }
     static LocalDate monday(LocalDate day){return day.minusDays(day.getDayOfWeek().getValue()-1);}
     void draw(){

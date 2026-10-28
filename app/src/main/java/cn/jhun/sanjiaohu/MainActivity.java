@@ -96,6 +96,7 @@ public class MainActivity extends Activity {
         courseNoteStore=new CourseNoteStore(this);
         try{localCourses=customStore.load();}catch(Exception e){customReadError=true;}
         if(saved!=null){page=saved.getInt("page",DEFAULT_PAGE);todayLabel=saved.getBoolean("todayLabel",false);wallpaperAspect=saved.getFloat("wallpaperAspect",.65f);}
+        if(getIntent().getBooleanExtra(TodayWidgetProvider.OPEN,false)){page=1;getIntent().removeExtra(TodayWidgetProvider.OPEN);}
         refreshAppearance();
         cache=new AtomicFile(new File(getFilesDir(),"schedule.json"));
         try {loginStateScript=read(getAssets().open("login-state.js"));loginSubmitScript=read(getAssets().open("login-submit.js"));schedulePortalScript=read(getAssets().open("schedule-portal.js"));scheduleListScript=read(getAssets().open("schedule-list.js"));} catch(Exception e) {throw new IllegalStateException("课表适配器缺失",e);}
@@ -127,6 +128,7 @@ public class MainActivity extends Activity {
     @Override protected void onStart(){super.onStart();inBackground=false;selectedWeek=currentWeek();render();handler.removeCallbacks(examClock);if(page==4)handler.postDelayed(examClock,30000);if(prefs.getBoolean("loginCompleted",false)||canAutoLogin())sync();}
     @Override protected void onResume(){super.onResume();updateBadge();UpdateStore.check(getApplicationContext(),false,error->handler.post(()->{if(!isDestroyed())updateBadge();}));}
     void updateBadge(){if(updateDot!=null)updateDot.setVisibility(new UpdateStore(this).available(this)?View.VISIBLE:View.GONE);}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getBooleanExtra(TodayWidgetProvider.OPEN,false)){intent.removeExtra(TodayWidgetProvider.OPEN);if(activeSheet!=null)activeSheet.dismiss();selectedWeek=currentWeek();if(page!=1)switchPage(1);else render();}}
     @Override protected void onStop(){finishWeekTransition();super.onStop();if(pageAnimator!=null)pageAnimator.cancel();dropOutgoing();if(moreMenu!=null)moreMenu.dismiss();inBackground=true;verified=false;automaticCredentials=null;autoRunning=false;if(busy){generation++;busy=false;web.stopLoading();setState("本地课表 · 返回应用时重新同步");}CookieManager.getInstance().flush();}
     @Override protected void onDestroy(){finishWeekTransition();if(pageAnimator!=null)pageAnimator.cancel();dropOutgoing();if(activeSheet!=null)activeSheet.dismiss();if(loginFailureDialog!=null)loginFailureDialog.dismiss();if(qrSessionExpiredDialog!=null)qrSessionExpiredDialog.dismiss();handler.removeCallbacksAndMessages(null);authIo.shutdown();web.destroy();super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putInt("page",page);out.putBoolean("todayLabel",todayLabel);out.putFloat("wallpaperAspect",wallpaperAspect);}
@@ -188,6 +190,7 @@ public class MainActivity extends Activity {
         try{schedule=new Schedule(academicStore.load("schedule",selectedTerm));state="本地课表 · 上次更新 "+stamp(schedule.savedAt);}catch(Exception e){state="该学期暂无本地课表 · 联网后获取";}
         scheduleCandidate=null;try{scheduleCandidate=academicStore.scheduleSnapshot(selectedTerm,"candidate");if(scheduleCandidate!=null)state="发现课表更新 · 待确认，当前课表已保留";}catch(Exception ignored){}
         selectedWeek=currentWeek();
+        TodayWidgetProvider.refresh(this);
     }
     void loadGrades(){
         grades=null;
@@ -325,9 +328,7 @@ public class MainActivity extends Activity {
         if(page!=1)return;
         if(moreMenu!=null && moreMenu.isShowing()){moreMenu.dismiss();return;}
         Ui.tap(anchor);
-        boolean hasPreviousSchedule=false;
-        if(!selectedTerm.isEmpty())try{hasPreviousSchedule=academicStore.scheduleSnapshot(selectedTerm,"previous")!=null;}catch(Exception ignored){}
-        moreMenu=MoreMenu.show(this,anchor,palette,hasPreviousSchedule,id->{switch(id){case 1:cancelSync();sync();break;case 2:if(anchor()==null)calibrate();else changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 12:chooseSemester(false);break;case 21:restoreSchedule();break;}});
+        moreMenu=MoreMenu.show(this,anchor,palette,id->{switch(id){case 1:cancelSync();sync();break;case 2:if(anchor()==null)calibrate();else changeWeek(currentWeek());break;case 3:calibrate();break;case 5:chooseWallpaper();break;case 6:restoreWallpaper();break;case 7:showTransparency();break;case 9:new ThemeColorSheet(this);break;case 24:startActivity(new Intent(this,WidgetConfigActivity.class));break;}});
     }
     void refreshAppearance(){
         wallpaper=WallpaperStore.load(this);int primary=prefs.getBoolean("manualTheme",false)?prefs.getInt("manualThemeColor",0xff2ecbff):backgroundPrimary();

@@ -12,7 +12,7 @@ import android.widget.*;
 public final class MoreMenu {
     public interface Action {void run(int id);}
     private MoreMenu(){}
-    public static PopupWindow show(Activity activity,View anchor,ThemePalette theme,boolean hasPreviousSchedule,Action action){
+    public static PopupWindow show(Activity activity,View anchor,ThemePalette theme,Action action){
         int padding=dp(activity,10),panelColor=theme.sheetSurface;
         Rect visible=new Rect();anchor.getWindowVisibleDisplayFrame(visible);
         int width=Math.min(dp(activity,288),Math.max(dp(activity,180),visible.width()-dp(activity,24)));
@@ -26,8 +26,6 @@ public final class MoreMenu {
         Icon close=new Icon(activity,22,theme.muted);close.setContentDescription("关闭更多菜单");close.setFocusable(true);close.setBackground(ripple(activity,theme.primary,theme.rippleMask));close.setOnClickListener(v->popup.dismiss());heading.addView(close,new LinearLayout.LayoutParams(dp(activity,44),dp(activity,44)));content.addView(heading);
         section(activity,content,"课表",theme);
         row(activity,content,"更新课表",1,theme,popup,action);
-        if(hasPreviousSchedule)row(activity,content,"恢复上一份课表",21,theme,popup,action);
-        row(activity,content,"切换学期",12,theme,popup,action);
         row(activity,content,"回到本周",2,theme,popup,action);
         row(activity,content,"周次校准",3,theme,popup,action);
         separator(activity,content,theme);
@@ -36,6 +34,8 @@ public final class MoreMenu {
         row(activity,content,"主题调色",9,theme,popup,action);
         row(activity,content,"课程透明度",7,theme,popup,action);
         row(activity,content,"恢复默认背景",6,theme,popup,action);
+        separator(activity,content,theme);
+        row(activity,content,"桌面小组件",24,theme,popup,action);
         content.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
         int[] pos=new int[2];anchor.getLocationOnScreen(pos);int below=visible.bottom-pos[1]-anchor.getHeight()-dp(activity,16);
         popup.setHeight(Math.min(content.getMeasuredHeight(),Math.max(dp(activity,160),below)));

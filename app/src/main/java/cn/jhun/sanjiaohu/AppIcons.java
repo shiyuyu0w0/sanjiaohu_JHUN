@@ -31,6 +31,7 @@ final class AppIcons {
             case 21:return R.drawable.ic_ui_history;
             case 22:return R.drawable.ic_ui_close;
             case 23:return R.drawable.ic_ui_book;
+            case 24:return R.drawable.ic_ui_widget;
             default:return R.drawable.ic_ui_user;
         }
     }
