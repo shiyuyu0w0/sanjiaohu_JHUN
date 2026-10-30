@@ -62,7 +62,7 @@ public final class LoginActivity extends Activity {
         TextView instructions=text("请使用已登录的喜鹊儿扫描二维码\n并按提示确认登录",14,theme.muted);instructions.setGravity(Gravity.CENTER);instructions.setLineSpacing(dp(5),1);instructions.setPadding(0,dp(16),0,dp(12));qrForm.addView(instructions);
         qrRefresh=text("刷新二维码",14,theme.accent);qrRefresh.setPadding(dp(18),dp(10),dp(18),dp(10));qrRefresh.setFocusable(true);qrRefresh.setOnClickListener(v->startQr());qrForm.addView(qrRefresh);content.addView(qrForm);
         remember=new Switch(this);SwitchTheme.apply(remember,theme);remember.setText("保存凭证并自动登录");remember.setTextColor(theme.text);remember.setTextSize(14);remember.setChecked(getSharedPreferences("settings",MODE_PRIVATE).getBoolean("autoLogin",true));remember.setPadding(0,0,0,dp(18));content.addView(remember);
-        submit=text("登 录",17,theme.onPrimary);submit.setGravity(Gravity.CENTER);submit.setBackground(shape(theme.primary));submit.setOnClickListener(v->login());content.addView(submit,new LinearLayout.LayoutParams(-1,dp(52)));
+        submit=text("登录",16,Ui.actionInk(theme,true));submit.setGravity(Gravity.CENTER);submit.setBackground(Ui.control(this,theme,true));submit.setOnClickListener(v->login());content.addView(submit,new LinearLayout.LayoutParams(-1,dp(52)));
         progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);progress.setIndeterminateTintList(ColorStateList.valueOf(theme.primary));progress.setVisibility(View.GONE);LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,dp(3));pp.topMargin=dp(12);content.addView(progress,pp);
         status=text("",13,theme.muted);status.setPadding(0,dp(16),0,dp(12));content.addView(status);
         TextView privacy=text("凭证或扫码会话加密保存在本机，仅用于教务系统。扫码会话失效后需重新扫码，可在个人页关闭保存并清除凭证。",12,theme.muted);privacy.setPadding(0,dp(18),0,0);content.addView(privacy);
@@ -90,8 +90,8 @@ public final class LoginActivity extends Activity {
     }
     void updateMode(){
         passwordForm.setVisibility(qrMode?View.GONE:View.VISIBLE);qrForm.setVisibility(qrMode?View.VISIBLE:View.GONE);submit.setVisibility(qrMode?View.GONE:View.VISIBLE);
-        passwordTab.setBackground(shape(qrMode?theme.controlSurface:theme.primary));passwordTab.setTextColor(qrMode?theme.text:theme.onPrimary);
-        qrTab.setBackground(shape(qrMode?theme.primary:theme.controlSurface));qrTab.setTextColor(qrMode?theme.onPrimary:theme.text);
+        passwordTab.setBackground(Ui.surface(this,qrMode?theme.controlSurface:theme.primary,qrMode?0:theme.outline,18));passwordTab.setTextColor(qrMode?theme.text:theme.onPrimary);
+        qrTab.setBackground(Ui.surface(this,qrMode?theme.primary:theme.controlSurface,qrMode?theme.outline:0,18));qrTab.setTextColor(qrMode?theme.onPrimary:theme.text);
         passwordTab.setSelected(!qrMode);qrTab.setSelected(qrMode);remember.setText(qrMode?"保存扫码登录会话":"保存凭证并自动登录");
     }
     void changeMode(boolean qr){
@@ -186,7 +186,7 @@ public final class LoginActivity extends Activity {
     @Override protected void onDestroy(){attempt++;handler.removeCallbacksAndMessages(null);submittedPassword=null;if(loginFailureDialog!=null)loginFailureDialog.dismiss();vault.shutdown();password.setText("");engine.stopLoading();engine.destroy();super.onDestroy();}
     LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(1);return v;}
     LinearLayout.LayoutParams fieldLayout(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(56));p.bottomMargin=dp(16);return p;}
-    EditText input(String hint,boolean secret){EditText e=new EditText(this);e.setHint(hint);e.setTextColor(theme.text);e.setHintTextColor(theme.muted);e.setSingleLine(true);e.setTextSize(16);e.setPadding(dp(16),0,dp(16),0);e.setBackground(shape(theme.controlSurface));e.setInputType(InputType.TYPE_CLASS_TEXT|(secret?InputType.TYPE_TEXT_VARIATION_PASSWORD:InputType.TYPE_TEXT_VARIATION_NORMAL));e.setSaveEnabled(false);e.setAutofillHints(secret?View.AUTOFILL_HINT_PASSWORD:View.AUTOFILL_HINT_USERNAME);return e;}
+    EditText input(String hint,boolean secret){EditText e=new EditText(this);e.setHint(hint);e.setTextColor(theme.text);e.setHintTextColor(theme.muted);e.setSingleLine(true);e.setTextSize(16);e.setPadding(dp(16),0,dp(16),0);e.setBackground(Ui.surface(this,theme.controlSurface,theme.outline,16));e.setInputType(InputType.TYPE_CLASS_TEXT|(secret?InputType.TYPE_TEXT_VARIATION_PASSWORD:InputType.TYPE_TEXT_VARIATION_NORMAL));e.setSaveEnabled(false);e.setAutofillHints(secret?View.AUTOFILL_HINT_PASSWORD:View.AUTOFILL_HINT_USERNAME);return e;}
     TextView text(String s,int size,int color){TextView v=new AppIcons.Label(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);return v;}
     GradientDrawable shape(int color){GradientDrawable s=new GradientDrawable();s.setColor(color);s.setCornerRadius(dp(16));return s;}
     int dp(float n){return (int)(getResources().getDisplayMetrics().density*n+.5f);}

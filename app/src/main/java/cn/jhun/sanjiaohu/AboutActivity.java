@@ -18,6 +18,7 @@ import java.io.InputStream;
 public final class AboutActivity extends Activity {
     /** Main changes in each released version, newest first. */
     static final String[][] UPDATES={
+        {"v1.2.0","- 新增 4×2 今日课表桌面小组件，展示当天课程和上课状态，支持自定义图片裁切、深浅色适配，点击直达课表。\n- 优化首页、个人、图书查询和电费等页面的布局。\n- 页面切换采用斜向揭幕，底部导航的选中背景平滑移动。\n- 优化按钮按压回弹、菜单展开和弹层滑入动效，遵循系统动画设置。\n- 精简主题调色，移除预设颜色，保留色盘、明暗、颜色代码和跟随背景主色。\n- 优化小屏和大字体下的课表时间栏与周次校准按钮显示。"},
         {"v1.1.9","- 默认打开课表，首页、课程与个人切换更流畅。\n- 优化页面进入、翻周与弹层动效，加入底栏图标回弹。\n- 页面切换、切周和课程详情等操作增加轻触震动反馈。\n- 修复切换到未校准课表后，背景图片右侧出现留白的问题。\n- 优化教务登录提示，网络或学校服务异常不再误判为密码错误。\n- 优化图书查询的内容间距与页面布局。"},
         {"v1.1.8","- 新增图书查询，可检索馆藏并查看索书号、可借册数与所在楼层库室。\n- 新增课程备注，支持添加、编辑和清空，刷新课表后仍保留。"},
         {"v1.1.7","- 新增教务系统扫码登录，可选择将有效会话加密保存在本机。\n- 电费页新增历史缴费订单，可查看金额、房间、时间和处理进度。\n- 统一重绘应用内图标，优化刷新、导航、菜单与深色模式下的显示。"},
@@ -81,7 +82,7 @@ public final class AboutActivity extends Activity {
             updates.addView(historyToggle,new LinearLayout.LayoutParams(-1,-2));updates.addView(updateHistory,new LinearLayout.LayoutParams(-1,-2));showHistory();
         }
         content.addView(updates);gap(content,16);
-        LinearLayout support=card();support.setBackground(shape(theme.entrySurface,24));
+        LinearLayout support=card();
         TextView supportTitle=text("技术支持",22,theme.deepAccent,true);supportTitle.setGravity(Gravity.CENTER);support.addView(supportTitle,new LinearLayout.LayoutParams(-1,-2));
         TextView supportNote=text("感谢以下同学在开发与测试中的帮助",12,ThemePalette.readable(theme.muted,theme.entrySurface,4.5),false);supportNote.setGravity(Gravity.CENTER);supportNote.setLineSpacing(dp(3),1);gap(support,10);support.addView(supportNote,new LinearLayout.LayoutParams(-1,-2));
         for(String name:SUPPORT){LinearLayout row=column();row.setGravity(Gravity.CENTER);gap(support,10);TextView person=text(name,14,theme.deepAccent,true);person.setGravity(Gravity.CENTER);person.setPadding(dp(18),dp(9),dp(18),dp(9));person.setBackground(shape(theme.controlSurface,14));row.addView(person,new LinearLayout.LayoutParams(-2,-2));support.addView(row,new LinearLayout.LayoutParams(-1,-2));}
@@ -100,7 +101,7 @@ public final class AboutActivity extends Activity {
         historyArrow.setRotation(historyExpanded?180:0);
     }
     LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
-    LinearLayout card(){LinearLayout v=column();v.setPadding(dp(20),dp(20),dp(20),dp(20));v.setBackground(shape(theme.entrySurface,24));return v;}
+    LinearLayout card(){LinearLayout v=column();v.setPadding(dp(20),dp(20),dp(20),dp(20));v.setBackground(Ui.card(this,theme));return v;}
     void gap(LinearLayout parent,int size){parent.addView(new View(this),new LinearLayout.LayoutParams(1,dp(size)));}
     TextView text(String value,int size,int color,boolean bold){TextView t=new AppIcons.Label(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(Typeface.create("sans-serif-medium",0));return t;}
     GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}

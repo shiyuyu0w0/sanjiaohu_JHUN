@@ -37,7 +37,7 @@ final class ElectricityPanel {
         try(InputStream in=a.getAssets().open("electricity-payment.js");ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[4096];int n;while((n=in.read(b))!=-1)out.write(b,0,n);adapter=out.toString("UTF-8");}catch(IOException ignored){}
         view=new ScrollView(a);view.setFillViewport(true);view.setVerticalScrollBarEnabled(false);view.setBackgroundColor(t.surface);
         content=a.column();content.setPadding(a.dp(20),a.dp(20),a.dp(20),a.dp(28));view.addView(content);
-        LinearLayout selection=a.column();selection.setPadding(a.dp(18),a.dp(18),a.dp(18),a.dp(18));selection.setBackground(a.shape(t.controlSurface,24));
+        content.addView(Ui.section(a,t,"宿舍与电表"));LinearLayout selection=a.column();selection.setPadding(a.dp(18),a.dp(18),a.dp(18),a.dp(18));selection.setBackground(Ui.surface(a,t.controlSurface,t.outline,18));
         selection.addView(a.text("宿舍楼",12,t.muted,false));a.gap(selection,8);
         buildingButton=a.action("选择宿舍楼",false,()->chooseBuilding());AppIcons.trailing(buildingButton,R.drawable.ic_ui_right);selection.addView(buildingButton,new LinearLayout.LayoutParams(-1,a.dp(52)));a.gap(selection,14);
         LinearLayout row=a.row(),left=a.column(),right=a.column();left.addView(a.text("楼层 / 单元",12,t.muted,false));right.addView(a.text("房间",12,t.muted,false));a.gap(left,8);a.gap(right,8);
@@ -116,7 +116,7 @@ final class ElectricityPanel {
         for(int i=0;i<meters.length;i++){
             if(untyped?i!=2:i==2)continue;
             final int index=i;ElectricityApi.Meter meter=meters[i];ElectricityApi.Reading reading=readings[i];
-            LinearLayout card=a.column();card.setPadding(a.dp(20),a.dp(20),a.dp(20),a.dp(20));card.setBackground(a.shape(t.controlSurface,24));LinearLayout head=a.row();
+            LinearLayout card=a.column();card.setPadding(a.dp(20),a.dp(20),a.dp(20),a.dp(20));card.setBackground(Ui.surface(a,t.controlSurface,t.outline,18));LinearLayout head=a.row();
             View stripe=new View(a);stripe.setBackground(a.shape(i==0?0xff2f6fed:i==1?0xfff08a24:0xff6b7280,3));head.addView(stripe,new LinearLayout.LayoutParams(a.dp(4),a.dp(22)));
             String type=i==0?"空调":i==1?"照明":"宿舍电表";
             TextView title=a.text(i==2?"宿舍电费":type+"电费",18,t.text,true);title.setPadding(a.dp(10),0,a.dp(8),0);head.addView(title,new LinearLayout.LayoutParams(0,-2,1));

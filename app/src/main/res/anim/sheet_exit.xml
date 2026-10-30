@@ -1,1 +1,3 @@
-<set xmlns:android="http://schemas.android.com/apk/res/android"><translate android:fromYDelta="0%" android:toYDelta="8%" android:duration="130"/><alpha android:fromAlpha="1" android:toAlpha="0" android:duration="130"/></set>
+<set xmlns:android="http://schemas.android.com/apk/res/android" android:interpolator="@android:interpolator/accelerate_cubic" android:shareInterpolator="true">
+    <translate android:fromXDelta="0%" android:toXDelta="-4%" android:fromYDelta="0%" android:toYDelta="100%" android:duration="320" />
+</set>

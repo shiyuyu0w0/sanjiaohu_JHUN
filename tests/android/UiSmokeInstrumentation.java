@@ -16,6 +16,7 @@ public final class UiSmokeInstrumentation extends Instrumentation {
     private int checks;
     private Throwable mainFailure;
     private FeedbackRoot feedback;
+    private boolean motionOnly;
 
     private final class FeedbackRoot extends android.widget.FrameLayout {
         int requests;
@@ -23,15 +24,34 @@ public final class UiSmokeInstrumentation extends Instrumentation {
         @Override public boolean performHapticFeedback(int effect){requests++;return super.performHapticFeedback(effect);}
     }
 
-    @Override public void onCreate(Bundle args){super.onCreate(args);start();}
+    @Override public void onCreate(Bundle args){super.onCreate(args);motionOnly=args!=null&&"true".equals(args.getString("motion_only"));start();}
     @Override public void onStart(){
         Bundle result=new Bundle();
         try{
             activity=(MainActivity)startActivitySync(new Intent(getTargetContext(),MainActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             settle();
+            if(motionOnly){
+                onMain(()->{
+                    android.widget.FrameLayout original=activity.root;
+                    feedback=new FeedbackRoot();feedback.setPadding(original.getPaddingLeft(),original.getPaddingTop(),original.getPaddingRight(),original.getPaddingBottom());
+                    activity.root=feedback;activity.setContentView(feedback);activity.switchPage(0);activity.render();
+                });settle();
+                pressFeedback();wallpaperAndFeedback();
+                result.putString("stream","PASS: "+checks+" focused Android motion checks\n");finish(-1,result);return;
+            }
             assertPage(1);
             onMain(()->check(activity.weekHost!=null,"cold launch opens timetable"));
+            onMain(()->{
+                ViewGroup grid=(ViewGroup)activity.weekHost.getChildAt(0);
+                for(int i=0;i<grid.getChildCount();i++){
+                    View child=grid.getChildAt(i);CharSequence description=child.getContentDescription();
+                    if(child instanceof TextView&&description!=null&&description.toString().contains(" 上课，")){
+                        TextView time=(TextView)child;check(time.getLayout()!=null&&time.getLayout().getHeight()<=time.getHeight(),"period time fits short/large-font viewport: "+time.getText()+" in "+time.getHeight()+" px, text "+(time.getLayout()==null?0:time.getLayout().getHeight())+" px");
+                        check(description.toString().contains(" 下课"),"full interval remains accessible");
+                    }
+                }
+            });
             onMain(()->{
                 android.widget.FrameLayout original=activity.root;
                 feedback=new FeedbackRoot();feedback.setPadding(original.getPaddingLeft(),original.getPaddingTop(),original.getPaddingRight(),original.getPaddingBottom());
@@ -39,7 +59,7 @@ public final class UiSmokeInstrumentation extends Instrumentation {
             });settle();
             checkBars(activity);
             screenshot("default-timetable");
-            nav("首页",0);nav("课程",1);nav("个人",2);nav("首页",0);
+            nav("首页",0);homeTileSizes();pressFeedback();nav("课程",1);nav("个人",2);nav("首页",0);
             openActivity("成绩查看",LoginActivity.class);assertPage(3);click("返回首页");settle();assertPage(0);
             openActivity("考试查询",LoginActivity.class);assertPage(4);click("返回首页");settle();assertPage(0);
             click("自定义课程");settle();assertSheet();dismissSheet();
@@ -53,9 +73,19 @@ public final class UiSmokeInstrumentation extends Instrumentation {
             Activity crop=startActivitySync(new Intent(getTargetContext(),WallpaperCropActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             settle();checkBars(crop);screenshot("WallpaperCropActivity");onMain(crop::finish);settle();
             nav("课程",1);click("更多选项");settle();
-            onMain(()->{check(activity.moreMenu!=null&&activity.moreMenu.isShowing(),"overflow menu");activity.moreMenu.dismiss();});
+            screenshot("overflow-menu");onMain(()->{check(activity.moreMenu!=null&&activity.moreMenu.isShowing(),"overflow menu");activity.moreMenu.dismiss();});
             onMain(()->new CalibrationSheet(activity));settle();assertSheet();dismissSheet();
-            onMain(()->new ThemeColorSheet(activity));settle();assertSheet();dismissSheet();
+            final ThemeColorSheet[] colorSheet=new ThemeColorSheet[1];
+            final int originalColor=activity.PRIMARY;
+            onMain(()->colorSheet[0]=new ThemeColorSheet(activity));settle();assertSheet();screenshot("theme-palette");
+            onMain(()->{
+                check(find(activity.activeSheet.getWindow().getDecorView(),"预设配色")==null,"preset section removed");
+                colorSheet[0].hex.setText("#A68CDB");
+                check(colorSheet[0].color==0xffa68cdb&&!colorSheet[0].follow.isChecked(),"custom color input updates draft");
+                check(activity.PRIMARY==originalColor,"draft does not change saved appearance");
+            });
+            settle();screenshot("theme-custom-color");dismissSheet();
+            onMain(()->check(activity.PRIMARY==originalColor,"cancel preserves appearance"));
             onMain(()->{
                 activity.switchPage(2);
                 check(Ui.animated()?activity.pageAnimator!=null&&activity.outgoing!=null:activity.pageAnimator==null,"page motion respects system animation setting");
@@ -83,6 +113,29 @@ public final class UiSmokeInstrumentation extends Instrumentation {
         mainFailure=null;
         runOnMainSync(()->{try{work.run();}catch(Throwable e){mainFailure=e;}});
         if(mainFailure!=null)throw new AssertionError("UI thread failure",mainFailure);
+    }
+    private void pressFeedback(){
+        final View[] tile=new View[1];
+        final android.widget.TextView[] button=new android.widget.TextView[1];
+        onMain(()->{tile[0]=(View)find(activity.screen,"考试查询").getParent();tile[0].setPressed(true);button[0]=activity.themedButton("测试按钮",()->{},true);activity.root.addView(button[0],new android.widget.FrameLayout.LayoutParams(160,80));button[0].setPressed(true);});
+        SystemClock.sleep(180);waitForIdleSync();
+        onMain(()->{
+            check(Ui.animated()?tile[0].getScaleX()<1&&tile[0].getScaleX()>=.97f:tile[0].getScaleX()==1,"press response respects animation setting");
+            check(Ui.animated()?button[0].getScaleX()<1&&button[0].getScaleX()>=.97f:button[0].getScaleX()==1,"text button contact respects animation setting");
+            tile[0].setPressed(false);button[0].setPressed(false);
+        });settle();
+        onMain(()->check(Math.abs(tile[0].getScaleX()-1)<.0001&&Math.abs(tile[0].getScaleY()-1)<.0001,"release or cancelled press restores size"));
+        onMain(()->{check(Math.abs(button[0].getScaleX()-1)<.0001,"text button release restores size");activity.root.removeView(button[0]);});
+    }
+    private void homeTileSizes(){
+        onMain(()->{
+            View title=find(activity.screen,"考试查询");ViewGroup tile=(ViewGroup)title.getParent();ViewGroup grid=(ViewGroup)tile.getParent();
+            check(grid.getChildCount()==MainActivity.HOME_TITLES.length,"all home entries present");
+            for(int i=0;i<grid.getChildCount();i++){
+                View card=grid.getChildAt(i);check(card.getWidth()==tile.getWidth()&&card.getHeight()==tile.getHeight(),"home entry sizes match, including final library entry");
+                check(card.getHeight()>=activity.dp(48),"home entry touch target");
+            }
+        });
     }
     private void populatedPages(){
         onMain(()->{
@@ -139,6 +192,7 @@ public final class UiSmokeInstrumentation extends Instrumentation {
                     check(activity.pageAnimator==null&&activity.outgoing==null,"tab motion removes outgoing page");
                     check(activity.pageContent.getAlpha()==1&&activity.pageContent.getTranslationX()==0,"tab motion settles visibly");
                     check(activity.pageContent.getScaleX()==1&&activity.pageContent.getScaleY()==1,"tab motion restores scale");
+                    check(((Ui.Page)activity.pageContent).progress==1,"completed page has no remaining reveal clip");
                 });
             }
             onMain(()->{
@@ -187,17 +241,29 @@ public final class UiSmokeInstrumentation extends Instrumentation {
         android.animation.ValueAnimator motion=activity.pageAnimator;
         int direction=to>from?1:-1;
         motion.setCurrentPlayTime(motion.getDuration()/6);
-        check(activity.outgoingContent.getAlpha()>0&&activity.outgoingContent.getAlpha()<1,"outgoing page visibly fades");
-        check(activity.outgoingContent.getTranslationX()*direction<0,"outgoing page moves opposite to arrival");
-        check(activity.pageContent.getAlpha()==0,"pages do not overlap during exit");
+        check(activity.outgoingContent.getAlpha()==1,"previous content stays opaque underneath reveal");
+        check(activity.outgoingContent.getTranslationX()*direction>0,"previous content has shallow directional parallax");
+        check(activity.pageContent.getAlpha()==1,"incoming text stays opaque");
+        Ui.Page incoming=(Ui.Page)activity.pageContent;
+        float early=incoming.progress;
+        check(early>0&&early<1&&incoming.direction==direction,"reveal follows navigation direction");
         motion.setCurrentPlayTime(motion.getDuration()/2);
-        check(activity.pageContent.getAlpha()>0&&activity.pageContent.getAlpha()<1,"incoming page visibly fades");
-        check(activity.pageContent.getTranslationX()*direction>0,"incoming page follows tab direction");
-        check(activity.pageContent.getScaleX()>.98f&&activity.pageContent.getScaleX()<1,"incoming page gently expands");
-        check(activity.outgoingContent.getAlpha()==0,"outgoing content hidden during entrance");
-        ViewGroup nav=(ViewGroup)activity.screen.getChildAt(activity.screen.getChildCount()-1);
+        check(incoming.progress>early&&incoming.progress<1,"cut-in advances continuously");
+        check(activity.pageContent.getScaleX()==1&&activity.pageContent.getScaleY()==1,"page text is never stretched");
+        Ui.Dock nav=(Ui.Dock)activity.screen.getChildAt(activity.screen.getChildCount()-1);
+        check(nav.position>Math.min(from,to)&&nav.position<Math.max(from,to),"selection pill travels between tabs");
         View icon=((ViewGroup)nav.getChildAt(to)).getChildAt(0);
-        check(icon.getScaleX()<1,"selected tab icon begins spring feedback");
+        check(icon.getScaleX()>=.94f&&icon.getScaleX()<=1.02f,"tab response remains subtle");
+        if(from==0&&to==1){
+            // A direct test click has not traversed layout yet. Lay out the new tree
+            // before capturing its in-flight paint rather than an empty child.
+            int width=activity.root.getWidth(),height=activity.root.getHeight();
+            activity.root.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(height,View.MeasureSpec.EXACTLY));
+            activity.root.layout(0,0,width,height);
+            motion.setCurrentPlayTime(motion.getDuration()/5);
+            android.graphics.Bitmap frame=android.graphics.Bitmap.createBitmap(activity.root.getWidth(),activity.root.getHeight(),android.graphics.Bitmap.Config.ARGB_8888);
+            try{activity.root.draw(new android.graphics.Canvas(frame));saveScreenshot("page-motion-midpoint",frame);}finally{frame.recycle();}
+        }
         // Rendering during a transition must clean up both pages, including the new scale.
         if(from==2&&to==0){activity.render();check(activity.pageContent.getScaleX()==1,"refresh cancels transition cleanly");}
     }
@@ -220,7 +286,32 @@ public final class UiSmokeInstrumentation extends Instrumentation {
         click(label);
         Activity opened=waitForMonitorWithTimeout(monitor,5000);
         check(opened!=null,"opened "+target.getSimpleName());
-        settle();checkBars(opened);screenshot(target.getSimpleName());onMain(opened::finish);settle();removeMonitor(monitor);
+        settle();checkBars(opened);screenshot(target.getSimpleName());
+        if(opened instanceof LibraryActivity){
+            LibraryActivity library=(LibraryActivity)opened;
+            onMain(()->{
+                library.emptyView.setVisibility(View.GONE);library.status.setText("以下为界面测试数据");
+                LibraryApi.Item book=new LibraryApi.Item();book.title="大学物理实验：测量方法与实验设计（测试数据）";book.author="测试作者";book.publisher="测试出版社";book.callNo="O4-33/01";book.available=3;book.totalCopies=5;
+                library.addCard(book,1);
+            });settle();screenshot("library-populated");
+        }
+        if(opened instanceof IdentityActivity&&"电费".equals(label)){
+            IdentityActivity identity=(IdentityActivity)opened;
+            onMain(()->{
+                identity.web.stopLoading();identity.handler.removeCallbacksAndMessages(null);
+                ElectricityPanel panel=identity.electricityPanel;
+                check(panel!=null,"native electricity panel created");panel.invalidate();panel.show();
+                panel.hint.setText("以下为界面测试数据");panel.buildingButton.setText("北区18舍");panel.floorButton.setText("4 层");panel.roomButton.setText("测试房间");
+                panel.readings[0]=new ElectricityApi.Reading(true,false,false,126.38,"");panel.readings[1]=new ElectricityApi.Reading(true,false,false,18.60,"");panel.renderCards();
+                // Draw the real native panel synchronously: a pending school login
+                // callback must not replace this fixture with the login screen.
+                int w=identity.body.getWidth(),h=identity.body.getHeight();
+                panel.view.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(h,View.MeasureSpec.EXACTLY));panel.view.layout(0,0,w,h);
+                android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888);
+                try{panel.view.draw(new android.graphics.Canvas(bitmap));saveScreenshot("electricity-populated",bitmap);}finally{bitmap.recycle();}
+            });
+        }
+        onMain(opened::finish);settle();removeMonitor(monitor);
     }
     private void checkBars(Activity target){
         onMain(()->{
@@ -236,13 +327,16 @@ public final class UiSmokeInstrumentation extends Instrumentation {
     private void screenshot(String name){
         android.graphics.Bitmap bitmap=getUiAutomation().takeScreenshot();
         check(bitmap!=null,"screenshot "+name);
+        try{saveScreenshot(name,bitmap);}finally{bitmap.recycle();}
+    }
+    private void saveScreenshot(String name,android.graphics.Bitmap bitmap){
         java.io.File base=getTargetContext().getExternalFilesDir(null);
         check(base!=null,"external screenshot directory available");
         java.io.File directory=new java.io.File(base,"ui-smoke");
         check(directory.isDirectory()||directory.mkdirs(),"create screenshot directory");
         try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(directory,name+".png"))){
             check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out),"save screenshot");
-        }catch(java.io.IOException e){throw new AssertionError(e);}finally{bitmap.recycle();}
+        }catch(java.io.IOException e){throw new AssertionError(e);}
     }
     private void click(String label){
         final float[] point=new float[2];

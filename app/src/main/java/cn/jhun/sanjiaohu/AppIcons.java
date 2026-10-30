@@ -54,6 +54,7 @@ final class AppIcons {
         private final Drawable icon;
         private final float size;
         Glyph(Context context,int resource,int color,float size){super(context);this.size=size;icon=drawable(context,resource,color);}
+        @Override public void setOnClickListener(OnClickListener listener){super.setOnClickListener(listener);if(listener!=null)Ui.press(this);}
         void setColor(int color){icon.setTint(color);invalidate();}
         @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);int s=Math.min(dp(getContext(),size),Math.min(getWidth(),getHeight()));int x=(getWidth()-s)/2,y=(getHeight()-s)/2;icon.setBounds(x,y,x+s,y+s);icon.draw(canvas);}
     }
@@ -62,6 +63,7 @@ final class AppIcons {
         private int lastResource;
         private Drawable icon;
         Label(Context context){super(context);}
+        @Override public void setOnClickListener(OnClickListener listener){super.setOnClickListener(listener);if(listener!=null)Ui.press(this);}
         @Override protected void onDraw(Canvas canvas){
             int res=0;String text=getText().toString();
             switch(text){case "‹":res=R.drawable.ic_ui_left;break;case "›":res=R.drawable.ic_ui_right;break;

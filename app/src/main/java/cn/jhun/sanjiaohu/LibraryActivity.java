@@ -81,11 +81,11 @@ public final class LibraryActivity extends Activity {
         keyword=new EditText(this);keyword.setHint("书名、作者或 ISBN");keyword.setSingleLine(true);
         keyword.setTextSize(16);keyword.setTextColor(theme.text);keyword.setHintTextColor(theme.muted);
         keyword.setInputType(InputType.TYPE_CLASS_TEXT);keyword.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
-        keyword.setBackground(shape(theme.controlSurface,15));
+        keyword.setBackground(Ui.surface(this,theme.controlSurface,theme.outline,26));
         // Align input text with the adjacent search button.
         keyword.setGravity(Gravity.CENTER_VERTICAL);
         keyword.setIncludeFontPadding(false);
-        keyword.setPadding(dp(14),0,dp(14),0);
+        keyword.setPadding(dp(16),0,dp(16),0);
         keyword.setContentDescription("检索词");
         keyword.setOnEditorActionListener((v,a,e)->{if(a==EditorInfo.IME_ACTION_SEARCH){runSearch(1);return true;}return false;});
         search.addView(keyword,new LinearLayout.LayoutParams(0,dp(SEARCH_HEIGHT),1));
@@ -100,7 +100,7 @@ public final class LibraryActivity extends Activity {
         typePicker.setTextSize(14);
         // 文字靠左、垂直居中；右侧留出下拉箭头的宽度，避免文字压到箭头上
         typePicker.setGravity(Gravity.CENTER_VERTICAL|Gravity.START);
-        typeRow.addView(typePicker,new LinearLayout.LayoutParams(-1,dp(PICKER_HEIGHT)));
+        typeRow.addView(typePicker,new LinearLayout.LayoutParams(-2,dp(PICKER_HEIGHT)));
         root.addView(typeRow);
         updateTypePicker();
 
@@ -115,7 +115,9 @@ public final class LibraryActivity extends Activity {
         LinearLayout content=column();content.setPadding(dp(18),0,dp(18),dp(20));
         results=column();content.addView(results);
         emptyView=text("",14,theme.muted,false);emptyView.setGravity(Gravity.CENTER);
-        emptyView.setLineSpacing(dp(6),1);emptyView.setPadding(dp(20),dp(60),dp(20),dp(60));
+        android.graphics.drawable.Drawable book=AppIcons.drawable(this,R.drawable.ic_ui_book,theme.deepAccent);book.setBounds(0,0,dp(32),dp(32));
+        emptyView.setCompoundDrawables(null,book,null,null);emptyView.setCompoundDrawablePadding(dp(18));
+        emptyView.setLineSpacing(dp(6),1);emptyView.setPadding(dp(20),dp(44),dp(20),dp(44));
         emptyView.setVisibility(View.GONE);content.addView(emptyView);
         scroller.addView(content);root.addView(scroller,new LinearLayout.LayoutParams(-1,0,1));
 
@@ -344,12 +346,15 @@ public final class LibraryActivity extends Activity {
     /** 一张结果卡片：默认只有基本信息 + 推测位置，展开时才拉馆藏。 */
     void addCard(LibraryApi.Item item,int index){
         LinearLayout card=column();card.setPadding(dp(CARD_PAD_H),dp(CARD_PAD_V),dp(CARD_PAD_H),dp(CARD_PAD_V));
-        card.setBackground(shape(theme.entrySurface,CARD_RADIUS));
+        card.setBackground(Ui.card(this,theme));
         LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(-1,-2);size.bottomMargin=dp(12);
         results.addView(card,size);
 
-        TextView title=text((index)+". "+(item.title.isEmpty()?"（无题名）":item.title),16,theme.text,true);
-        title.setLineSpacing(dp(4),1);card.addView(title);
+        LinearLayout heading=row();heading.setGravity(Gravity.CENTER_VERTICAL);
+        View book=new AppIcons.Glyph(this,R.drawable.ic_ui_book,theme.deepAccent,22);book.setBackground(shape(theme.controlSurface,12));book.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);heading.addView(book,new LinearLayout.LayoutParams(dp(40),dp(44)));
+        TextView title=text(item.title.isEmpty()?"（无题名）":item.title,16,theme.text,true);title.setLineSpacing(dp(4),1);
+        LinearLayout.LayoutParams titleSize=new LinearLayout.LayoutParams(0,-2,1);titleSize.leftMargin=dp(12);heading.addView(title,titleSize);card.addView(heading);
+        View rule=new View(this);rule.setBackgroundColor(theme.outline);LinearLayout.LayoutParams ruleSize=new LinearLayout.LayoutParams(-1,Math.max(1,dp(.5f)));ruleSize.setMargins(0,dp(12),0,dp(10));card.addView(rule,ruleSize);
         if(!item.author.isEmpty())card.addView(line(item.author,13,theme.muted));
         if(!item.publisher.isEmpty())card.addView(line(item.publisher,12,theme.muted));
 
@@ -530,11 +535,9 @@ public final class LibraryActivity extends Activity {
         button.setOnClickListener(v->run.run());return button;
     }
     TextView themedButton(String value,Runnable run,boolean filled){
-        TextView button=text(value,14,filled?theme.onPrimary:theme.deepAccent,false);button.setGravity(Gravity.CENTER);
+        TextView button=text(value,14,Ui.actionInk(theme,filled),false);button.setGravity(Gravity.CENTER);
         button.setContentDescription(value);button.setFocusable(true);button.setIncludeFontPadding(false);button.setPadding(dp(14),0,dp(14),0);
-        GradientDrawable fill=shape(filled?theme.primary:theme.controlSurface,14);
-        if(!filled)fill.setStroke(dp(1),theme.outline);
-        button.setBackground(new RippleDrawable(ColorStateList.valueOf(((filled?theme.onPrimary:theme.primary)&0xffffff)|0x22000000),fill,shape(theme.rippleMask,14)));
+        button.setBackground(Ui.control(this,theme,filled,theme.controlSurface));
         // run 为 null 时只做外观，点击行为由调用方稍后绑定（需要自引用时用）
         if(run!=null)button.setOnClickListener(v->run.run());
         return button;
