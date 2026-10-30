@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "manifestRevision": 16,
+  "manifestRevision": 17,
   "enabled": true,
   "channel": "stable",
   "packageName": "cn.jhun.sanjiaohu",
@@ -9,18 +9,19 @@
   "minSdk": 26,
   "releaseNotes": [
     "新增 4×2 今日课表桌面小组件，展示当天课程和上课状态，支持自定义图片裁切、深浅色适配，点击直达课表",
-    "优化首页、个人、图书查询和电费等页面的布局，保留原有配色",
+    "优化首页、个人、图书查询和电费布局，教务账号与自动登录设置合并展示",
     "页面切换采用斜向揭幕，底部导航的选中背景平滑移动",
     "优化按钮按压回弹、菜单展开和弹层滑入动效，遵循系统动画设置",
     "精简主题调色，移除预设颜色，保留色盘、明暗、颜色代码和跟随背景主色",
-    "优化小屏和大字体下的课表时间栏与周次校准按钮显示"
+    "优化小屏和大字体下的课表时间栏与周次校准按钮显示",
+    "完整的新课表获取成功后自动使用，解析不完整时保留本地记录"
   ],
   "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.2.0",
   "apk": {
     "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.0/Sanjiaohu-1.2.0.apk",
     "gitee": "https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.0/Sanjiaohu-1.2.0.apk",
     "sizeBytes": 2647555,
-    "sha256": "e478662231ca08b87a16174cd2239e10993570a630da67024de8aaf5006a5c1c",
+    "sha256": "16484fda480580443267fa8c0f80b1fef73e44e77b1ebdaf6a5d960e92ecca9c",
     "mirrors": [
       {
         "id": "ghproxy",

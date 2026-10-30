@@ -188,7 +188,12 @@ public class MainActivity extends Activity {
     void loadSchedule(){
         schedule=null;
         try{schedule=new Schedule(academicStore.load("schedule",selectedTerm));state="本地课表 · 上次更新 "+stamp(schedule.savedAt);}catch(Exception e){state="该学期暂无本地课表 · 联网后获取";}
-        scheduleCandidate=null;try{scheduleCandidate=academicStore.scheduleSnapshot(selectedTerm,"candidate");if(scheduleCandidate!=null)state="发现课表更新 · 待确认，当前课表已保留";}catch(Exception ignored){}
+        scheduleCandidate=null;
+        try{
+            if(academicStore.adoptPendingSchedule(selectedTerm)){schedule=new Schedule(academicStore.load("schedule",selectedTerm));state="已使用新课表 · "+stamp(schedule.savedAt);}
+            scheduleCandidate=academicStore.scheduleSnapshot(selectedTerm,"candidate");
+            if(scheduleCandidate!=null)state=schedule==null?"部分课程未能解析 · 请查看详情":"部分课程未能解析 · 当前课表已保留";
+        }catch(Exception e){state=schedule==null?"新课表暂时无法读取 · 可稍后刷新重试":"新课表暂时无法保存 · 当前课表已保留";}
         selectedWeek=currentWeek();
         TodayWidgetProvider.refresh(this);
     }
@@ -310,8 +315,8 @@ public class MainActivity extends Activity {
                     gradeState="已保存到本地 · "+stamp(grades.savedAt);
                 }else{
                     Schedule fresh=new Schedule(obj);
-                    if(academicStore.stageSchedule(obj)){schedule=fresh;scheduleCandidate=null;state="已保存到本地 · "+stamp(schedule.savedAt);}
-                    else{scheduleCandidate=obj;state="发现课表更新 · 待确认，当前课表已保留";}
+                    if(academicStore.stageSchedule(obj)){schedule=fresh;scheduleCandidate=null;state="已使用新课表 · "+stamp(schedule.savedAt);}
+                    else{scheduleCandidate=obj;state=schedule==null?"部分课程未能解析 · 请查看详情":"部分课程未能解析 · 当前课表已保留";}
                 }
                 authenticated();busy=false;generation++;CookieManager.getInstance().flush();render();refreshSummary();
             }catch(Exception e){fail("数据格式变化或保存失败 · 已保留上次记录");}
@@ -398,7 +403,7 @@ public class MainActivity extends Activity {
             pageContent.addView(subtitle,new LinearLayout.LayoutParams(-1,-2));
         }
         if(page==1){
-            if(scheduleCandidate!=null)pageContent.addView(themedButton("发现课表更新 · 点击核对",()->reviewSchedule(),false),new LinearLayout.LayoutParams(-1,dp(40)));
+            if(scheduleCandidate!=null)pageContent.addView(themedButton("部分课程未能解析 · 查看详情",()->reviewSchedule(),false),new LinearLayout.LayoutParams(-1,dp(40)));
             LinearLayout weekBar=row();weekBar.setPadding(0,dp(3),0,dp(3));previousWeekButton=button("‹",()->changeWeek(selectedWeek-1));previousWeekButton.setContentDescription("上一周");weekBar.addView(previousWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));
             weekTitle=button("",()->{if(anchor()==null)calibrate();else chooseWeek();});weekTitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);weekBar.addView(weekTitle,new LinearLayout.LayoutParams(0,dp(44),1));nextWeekButton=button("›",()->changeWeek(selectedWeek+1));nextWeekButton.setContentDescription("下一周");weekBar.addView(nextWeekButton,new LinearLayout.LayoutParams(dp(44),dp(44)));pageContent.addView(weekBar);updateWeekTitle();
             if(anchor()==null){LinearLayout.LayoutParams noticeSize=new LinearLayout.LayoutParams(-1,-2);noticeSize.setMargins(dp(5),dp(2),dp(5),dp(7));pageContent.addView(calibrationNotice(),noticeSize);}
@@ -478,10 +483,10 @@ public class MainActivity extends Activity {
         try{
             final JSONObject candidate=academicStore.scheduleSnapshot(term,"candidate");if(candidate==null){Toast.makeText(this,"暂无待确认的课表更新",Toast.LENGTH_SHORT).show();return;}
             final String fingerprint=ScheduleRevision.fingerprint(candidate);Schedule fresh=new Schedule(candidate);
-            UiSheet sheet=new UiSheet(this,"确认课表更新",term,.84f);
+            UiSheet sheet=new UiSheet(this,"课表解析详情",term,.84f);
             int oldCount=schedule==null?0:ScheduleRevision.courseCount(schedule.json),newCount=ScheduleRevision.courseCount(candidate);
             sheet.body.addView(label("当前 "+oldCount+" 门 → 新课表 "+newCount+" 门",19,INK,true));space(sheet.body,10);
-            sheet.body.addView(label("确认后替换学校课表，自定义课程不受影响。可在更多菜单恢复上一份。",13,MUTED,false));space(sheet.body,14);
+            sheet.body.addView(label("确认后替换学校课表，自定义课程不受影响。",13,MUTED,false));space(sheet.body,14);
             JSONArray issues=candidate.optJSONArray("issues");if(issues!=null&&issues.length()>0){sheet.body.addView(label("有 "+issues.length()+" 行未能解析，请先核对",15,palette.error,true));for(int i=0;i<issues.length();i++){JSONObject issue=issues.getJSONObject(i);space(sheet.body,6);sheet.body.addView(label(issue.optString("name")+" · "+issue.optString("reason")+"\n"+issue.optString("arrangement"),12,MUTED,false));}space(sheet.body,14);}
             for(Course c:fresh.courses){sheet.body.addView(label(c.name,15,INK,true));space(sheet.body,4);sheet.body.addView(label("周"+"一二三四五六日".charAt(c.day-1)+" · "+c.start+"—"+c.end+" 节 · "+c.weekText+" 周\n"+c.teacher+" · "+c.room,12,MUTED,false));space(sheet.body,12);}
             JSONArray extras=candidate.optJSONArray("unscheduled");if(extras!=null&&extras.length()>0){sheet.body.addView(label("无固定上课安排",15,INK,true));for(int i=0;i<extras.length();i++){JSONObject extra=extras.getJSONObject(i);space(sheet.body,6);sheet.body.addView(label(extra.optString("name")+" · "+extra.optString("note"),12,MUTED,false));}}
@@ -744,11 +749,11 @@ public class MainActivity extends Activity {
     View userView(){
         LinearLayout content=column();content.setPadding(dp(6),dp(12),dp(6),dp(18));content.addView(Ui.section(this,palette,"账号与登录"));LinearLayout user=panel();LinearLayout accountHeading=row();MoreMenu.Icon avatar=new MoreMenu.Icon(this,4,palette.deepAccent);avatar.setBackground(shape(palette.controlSurface,16));accountHeading.addView(avatar,new LinearLayout.LayoutParams(dp(48),dp(48)));LinearLayout accountWords=column();accountWords.setPadding(dp(12),0,0,0);accountWords.addView(label("教务账号",19,INK,true));authStatusText=label(authStatus(),12,MUTED,false);accountWords.addView(authStatusText);accountHeading.addView(accountWords,new LinearLayout.LayoutParams(0,-2,1));user.addView(accountHeading);
         long at=prefs.getLong("lastAuthAt",0);if(at>0){space(user,6);user.addView(label("最近验证 "+stamp(at),12,MUTED,false));}space(user,20);
-        TextView login=themedButton(verified?"重新登录 / 更换账号":"登录教务账号",()->showLogin(),true);user.addView(login,new LinearLayout.LayoutParams(-1,dp(48)));content.addView(user);space(content,12);
-        LinearLayout storage=panel();Switch automatic=new Switch(this);SwitchTheme.apply(automatic,palette);automatic.setText(qrLogin()?"保存扫码会话":"自动登录");automatic.setTextSize(16);automatic.setTextColor(INK);automatic.setChecked(prefs.getBoolean("autoLogin",true)&&(qrLogin()?TeachingSessionStore.exists(this):CredentialStore.exists(this)));automatic.setEnabled(!credentialBusy);storage.addView(automatic);space(storage,10);
-        storage.addView(label(qrLogin()?(TeachingSessionStore.exists(this)?"扫码会话已加密保存在本机，下次打开会先验证会话。学校会话过期后需重新扫码。":"登录时开启「保存扫码登录会话」，下次打开可复用有效会话。"):(CredentialStore.exists(this)?"登录凭证已加密保存在本机。会话过期后尝试自动续登；验证码需手动填写。":"登录时开启「保存凭证并自动登录」，以后打开应用可自动续登。"),13,MUTED,false));
+        TextView login=themedButton(verified?"重新登录 / 更换账号":"登录教务账号",()->showLogin(),true);user.addView(login,new LinearLayout.LayoutParams(-1,dp(48)));space(user,20);
+        Switch automatic=new Switch(this);SwitchTheme.apply(automatic,palette);automatic.setText(qrLogin()?"保存扫码会话":"自动登录");automatic.setTextSize(16);automatic.setTextColor(INK);automatic.setChecked(prefs.getBoolean("autoLogin",true)&&(qrLogin()?TeachingSessionStore.exists(this):CredentialStore.exists(this)));automatic.setEnabled(!credentialBusy);user.addView(automatic);space(user,10);
+        user.addView(label(qrLogin()?(TeachingSessionStore.exists(this)?"扫码会话已加密保存在本机，下次打开会先验证会话。学校会话过期后需重新扫码。":"登录时开启「保存扫码登录会话」，下次打开可复用有效会话。"):(CredentialStore.exists(this)?"登录凭证已加密保存在本机。会话过期后尝试自动续登；验证码需手动填写。":"登录时开启「保存凭证并自动登录」，以后打开应用可自动续登。"),13,MUTED,false));
         automatic.setOnCheckedChangeListener((v,enabled)->{if(enabled){prefs.edit().putBoolean("autoLogin",true).apply();showLogin();}else clearCredentials(false);});
-        space(storage,18);TextView logout=themedButton("退出登录并清除凭证",()->logout(),false);logout.setEnabled(!credentialBusy);logout.setAlpha(credentialBusy?.45f:1f);storage.addView(logout,new LinearLayout.LayoutParams(-1,dp(48)));content.addView(storage);space(content,16);
+        space(user,18);TextView logout=themedButton("退出登录并清除凭证",()->logout(),false);logout.setEnabled(!credentialBusy);logout.setAlpha(credentialBusy?.45f:1f);user.addView(logout,new LinearLayout.LayoutParams(-1,dp(48)));content.addView(user);space(content,16);
         content.addView(Ui.section(this,palette,"校园服务账号"));LinearLayout identity=panel();identity.addView(label("统一身份认证",19,INK,true));space(identity,8);
         android.content.SharedPreferences identityPrefs=getSharedPreferences("identity",MODE_PRIVATE);boolean savedIdentity=IdentityCredentialStore.exists(this);
         identity.addView(label(identityBusy?"正在清除统一认证会话…":identityPrefs.getBoolean("blocked",false)?"需要重新登录或完成学校验证":identityPrefs.getBoolean("completed",false)?"已有登录记录 · 使用时验证会话":savedIdentity?"已保存凭证 · 尚未验证":"未登录",14,INK,true));space(identity,8);

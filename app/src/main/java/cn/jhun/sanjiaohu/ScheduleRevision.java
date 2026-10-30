@@ -13,10 +13,10 @@ final class ScheduleRevision {
         JSONArray extra=data.optJSONArray("unscheduled");if(extra!=null)for(int i=0;i<extra.length();i++){JSONObject item=extra.getJSONObject(i);entries.add(new JSONArray().put("unscheduled").put(item.optString("name")).put(item.optString("teacher")).put(item.optString("note")).toString());}
         String canonical=Term.key(schedule.term)+"\n"+String.join("\n",entries);byte[] digest=MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8));StringBuilder hex=new StringBuilder();for(byte b:digest)hex.append(String.format(Locale.ROOT,"%02x",b&255));return hex.toString();
     }
-    static boolean needsReview(JSONObject active,JSONObject fresh)throws Exception{
+    /** Complete school results take effect immediately; only parsing warnings need review. */
+    static boolean needsReview(JSONObject fresh)throws Exception{
         new Schedule(fresh);JSONArray issues=fresh.optJSONArray("issues");
-        if(fresh.optBoolean("requiresReview")||(issues!=null&&issues.length()>0))return true;
-        return active!=null&&!fingerprint(active).equals(fingerprint(fresh));
+        return fresh.optBoolean("requiresReview")||(issues!=null&&issues.length()>0);
     }
     static int courseCount(JSONObject data)throws Exception{Set<String> names=new HashSet<>();for(Course c:new Schedule(data).courses)names.add(c.name);return names.size();}
 }

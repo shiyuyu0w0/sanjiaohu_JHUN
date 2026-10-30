@@ -59,7 +59,7 @@ public final class UiSmokeInstrumentation extends Instrumentation {
             });settle();
             checkBars(activity);
             screenshot("default-timetable");
-            nav("首页",0);homeTileSizes();pressFeedback();nav("课程",1);nav("个人",2);nav("首页",0);
+            nav("首页",0);homeTileSizes();pressFeedback();nav("课程",1);nav("个人",2);accountGrouping();nav("首页",0);
             openActivity("成绩查看",LoginActivity.class);assertPage(3);click("返回首页");settle();assertPage(0);
             openActivity("考试查询",LoginActivity.class);assertPage(4);click("返回首页");settle();assertPage(0);
             click("自定义课程");settle();assertSheet();dismissSheet();
@@ -101,6 +101,7 @@ public final class UiSmokeInstrumentation extends Instrumentation {
                 check(activity.pageContent.getScaleX()==1&&activity.pageContent.getScaleY()==1,"incoming page scale restored");
                 check(activity.pageContent.getClipChildren(),"scroll content cannot overlap status and navigation");
             });
+            automaticScheduleUpdates();
             populatedPages();
             weekMotion();
             wallpaperAndFeedback();
@@ -126,6 +127,72 @@ public final class UiSmokeInstrumentation extends Instrumentation {
         });settle();
         onMain(()->check(Math.abs(tile[0].getScaleX()-1)<.0001&&Math.abs(tile[0].getScaleY()-1)<.0001,"release or cancelled press restores size"));
         onMain(()->{check(Math.abs(button[0].getScaleX()-1)<.0001,"text button release restores size");activity.root.removeView(button[0]);});
+    }
+    private void accountGrouping(){
+        onMain(()->{
+            View login=find(activity.screen,"登录教务账号");
+            if(login==null)login=find(activity.screen,"重新登录 / 更换账号");
+            View automatic=find(activity.screen,activity.qrLogin()?"保存扫码会话":"自动登录");
+            View logout=find(activity.screen,"退出登录并清除凭证");
+            check(login!=null&&automatic!=null&&logout!=null,"teaching account controls are present");
+            check(login.getParent()==automatic.getParent()&&login.getParent()==logout.getParent(),"account, automatic login and logout share one card");
+            View identity=find(activity.screen,"统一身份认证");
+            check(identity!=null&&identity.getParent()!=login.getParent(),"campus identity account remains separate");
+        });
+    }
+    private org.json.JSONObject scheduleFixture(String room,long savedAt)throws Exception{
+        org.json.JSONObject course=new org.json.JSONObject().put("name","测试数学").put("teacher","测试教师").put("room",room).put("weekText","1-16").put("day",1).put("start",1).put("end",2);
+        return new org.json.JSONObject().put("version",2).put("complete",true).put("term","2026-2027学年第一学期").put("maxWeek",20).put("savedAt",savedAt).put("source","school-sync").put("courses",new org.json.JSONArray().put(course));
+    }
+    private void automaticScheduleUpdates(){
+        onMain(()->{
+            AcademicStore originalStore=activity.academicStore;Schedule originalSchedule=activity.schedule;
+            org.json.JSONObject originalCandidate=activity.scheduleCandidate;
+            String originalTerm=activity.selectedTerm,originalState=activity.state;int originalWeek=activity.selectedWeek;
+            java.io.File directory=new java.io.File(activity.getCacheDir(),"schedule-sync-"+java.util.UUID.randomUUID());
+            check(directory.mkdir(),"isolated schedule cache created");
+            try{
+                android.content.Context isolated=new android.content.ContextWrapper(activity){@Override public java.io.File getFilesDir(){return directory;}};
+                AcademicStore store=new AcademicStore(isolated);String term="2026-2027学年第一学期";
+                org.json.JSONObject first=scheduleFixture("A101",100),changed=scheduleFixture("B202",200);
+                check(store.stageSchedule(first),"first valid schedule applied");
+                check(store.stageSchedule(changed),"changed classroom automatically applied");
+                check(new Schedule(store.load("schedule",term)).courses.get(0).room.equals("B202"),"new schedule persisted as active");
+                check(new Schedule(store.scheduleSnapshot(term,"previous")).courses.get(0).room.equals("A101"),"previous schedule retained atomically");
+                check(store.scheduleSnapshot(term,"candidate")==null,"complete updates leave no confirmation candidate");
+                check(store.stageSchedule(scheduleFixture("B202",300)),"same schedule refreshes normally");
+                check(store.scheduleSnapshot(term,"previous").optLong("savedAt")==100,"unchanged refresh preserves previous snapshot");
+                org.json.JSONObject partial=scheduleFixture("C303",400).put("issues",new org.json.JSONArray().put(new org.json.JSONObject().put("reason","无法识别")));
+                check(!store.stageSchedule(partial),"partial parsing still needs review");
+                check(store.load("schedule",term).optLong("savedAt")==300,"partial result cannot replace working schedule");
+                check(!store.adoptPendingSchedule(term),"offline reopening cannot silently accept partial data");
+                byte[] before=java.nio.file.Files.readAllBytes(new java.io.File(directory,"schedule-2026-1.json").toPath());
+                boolean rejected=false;try{store.stageSchedule(scheduleFixture("D404",500).put("complete",false));}catch(Exception expected){rejected=true;}
+                check(rejected,"incomplete report rejected");
+                check(java.util.Arrays.equals(before,java.nio.file.Files.readAllBytes(new java.io.File(directory,"schedule-2026-1.json").toPath())),"invalid fetch leaves all cached snapshots unchanged");
+                check(store.stageSchedule(scheduleFixture("D404",600)),"later complete refresh applies without confirmation");
+                check(store.scheduleSnapshot(term,"candidate")==null,"complete refresh clears older partial candidate");
+                org.json.JSONObject envelope=new org.json.JSONObject().put("format","schedule-snapshots-v1").put("term",term).put("active",store.load("schedule",term)).put("candidate",scheduleFixture("E505",700));
+                java.io.File target=new java.io.File(directory,"schedule-2026-1.json");
+                java.nio.file.Files.write(target.toPath(),envelope.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                activity.academicStore=store;activity.selectedTerm=term;activity.loadSchedule();
+                check(activity.schedule.courses.get(0).room.equals("E505")&&activity.scheduleCandidate==null,"complete legacy candidate becomes visible when reopening offline");
+                check(new Schedule(new AcademicStore(isolated).load("schedule",term)).courses.get(0).room.equals("E505"),"adopted legacy update survives store recreation");
+                envelope.put("candidate",scheduleFixture("STALE",500)).put("active",store.load("schedule",term));
+                java.nio.file.Files.write(target.toPath(),envelope.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                check(!store.adoptPendingSchedule(term)&&store.scheduleSnapshot(term,"candidate")==null,"stale pending snapshot cannot downgrade current schedule");
+                org.json.JSONObject empty=scheduleFixture("",800).put("courses",new org.json.JSONArray());
+                check(store.stageSchedule(empty)&&new Schedule(store.load("schedule",term)).courses.isEmpty(),"school-confirmed empty schedule also takes effect");
+                org.json.JSONObject other=scheduleFixture("OTHER",900).put("term","2025-2026学年第二学期");store.stageSchedule(other);
+                check(new Schedule(store.load("schedule",term)).courses.isEmpty(),"semester caches remain isolated");
+            }catch(Exception e){throw new AssertionError("automatic schedule refresh",e);}
+            finally{
+                activity.academicStore=originalStore;activity.schedule=originalSchedule;activity.scheduleCandidate=originalCandidate;
+                activity.selectedTerm=originalTerm;activity.state=originalState;activity.selectedWeek=originalWeek;
+                java.io.File[] files=directory.listFiles();if(files!=null)for(java.io.File file:files)check(file.delete(),"remove isolated cache fixture");
+                check(directory.delete(),"remove isolated cache directory");
+            }
+        });
     }
     private void homeTileSizes(){
         onMain(()->{

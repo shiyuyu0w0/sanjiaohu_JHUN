@@ -40,9 +40,18 @@ final class AcademicStore {
         if(data!=null){if(!Term.same(term,data.optString("term")))throw new IOException("快照学期不匹配");new Schedule(data);}return data;
     }
     boolean stageSchedule(JSONObject fresh)throws Exception{
-        String term=fresh.getString("term");JSONObject state=snapshots(term),active=state.optJSONObject("active");fresh.put("fingerprint",ScheduleRevision.fingerprint(fresh));
-        if(ScheduleRevision.needsReview(active,fresh)){state.put("candidate",fresh).put("checkedAt",System.currentTimeMillis());writeSnapshots(state);return false;}
+        String term=fresh.getString("term");fresh.put("fingerprint",ScheduleRevision.fingerprint(fresh));
+        if(ScheduleRevision.needsReview(fresh)){JSONObject state=snapshots(term);state.put("candidate",fresh).put("checkedAt",System.currentTimeMillis());writeSnapshots(state);return false;}
         commitSchedule(fresh);return true;
+    }
+    /** Adopt complete results left awaiting confirmation by older versions, including offline. */
+    boolean adoptPendingSchedule(String term)throws Exception{
+        JSONObject candidate=scheduleSnapshot(term,"candidate");
+        if(candidate==null||ScheduleRevision.needsReview(candidate))return false;
+        if(!CachePolicy.usable(candidate.optLong("savedAt"),candidate.optString("source")))throw new IOException("待更新课表缓存校验失败");
+        JSONObject active=snapshots(term).optJSONObject("active");
+        if(active!=null&&candidate.optLong("savedAt")<active.optLong("savedAt")){discardSchedule(term);return false;}
+        commitSchedule(candidate);return true;
     }
     private void commitSchedule(JSONObject fresh)throws Exception{
         new Schedule(fresh);JSONObject state=snapshots(fresh.getString("term")),active=state.optJSONObject("active");
