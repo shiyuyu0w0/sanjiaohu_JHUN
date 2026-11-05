@@ -2,9 +2,9 @@
 
 ## 当前发布准备
 
-待发布版本为 **1.1.9（versionCode 52）**，最低 Android 8.0（API 26）。本次发布材料、校验结果与操作清单见 [v1.1.9 发布准备](release-1.1.9.md)。
+待发布版本为 **1.2.1（versionCode 54）**，最低 Android 8.0（API 26）。本次发布材料、校验结果与操作清单见 [v1.2.1 发布准备](release-1.2.1.md)。
 
-本次准备保留 `updates/stable/version.json` 中已上线的 1.1.8（修订号 12），将 1.1.9 的关闭清单放在 `updates/staged/1.1.9.json`（修订号 13）。客户端只读取 stable 路径，不会发现尚未上传的安装包。脚本不会创建远程 Release、提交代码或推送仓库。
+本地 `updates/stable/version.json` 已按发布要求更新为 1.2.1（修订号 19），`enabled: true`，尚未推送。`updates/staged/1.2.1.json` 保留最初生成的关闭清单（修订号 18）。脚本不会创建远程 Release、提交代码或推送仓库。
 
 ## 更新功能
 
@@ -25,25 +25,25 @@
 在项目根目录打开 PowerShell：
 
 ```powershell
-./build-local.ps1 -Work "$PWD/build/release-1.1.9"
-./scripts/test-local.ps1 -Classes "$PWD/build/release-1.1.9/classes"
-./tests/UpdateReleaseTest.ps1 -Apk ./Sanjiaohu-1.1.9.apk
+./build-local.ps1 -Work "$PWD/build/release-1.2.1"
+./scripts/test-local.ps1 -Classes "$PWD/build/release-1.2.1/classes"
+./tests/UpdateReleaseTest.ps1 -Apk ./Sanjiaohu-1.2.1.apk
 ```
 
-构建使用 `signing/development.keystore` 中的原有签名；不能换成新密钥。最终安装包为根目录 `Sanjiaohu-1.1.9.apk`。
+构建使用 `signing/development.keystore` 中的原有签名；不能换成新密钥。最终安装包为根目录 `Sanjiaohu-1.2.1.apk`。
 
-首次准备 1.1.9 的清单命令如下（本次已经执行，不要直接用同一修订号覆盖）：
+首次准备 1.2.1 的清单命令如下（本次已经执行，不要直接用同一修订号覆盖）：
 
 ```powershell
 ./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.9.apk `
-  -ManifestRevision 13 `
-  -NotesFile ./updates/release-notes-1.1.9.txt `
-  -Output ./updates/staged/1.1.9.json
+  -Apk ./Sanjiaohu-1.2.1.apk `
+  -ManifestRevision 18 `
+  -NotesFile ./updates/release-notes-1.2.1.txt `
+  -Output ./updates/staged/1.2.1.json
 
 ./scripts/verify-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.9.apk `
-  -Manifest ./updates/staged/1.1.9.json `
+  -Apk ./Sanjiaohu-1.2.1.apk `
+  -Manifest ./updates/staged/1.2.1.json `
   -Offline
 ```
 
@@ -51,22 +51,15 @@
 
 ## 发布：上传安装包后启用更新
 
-1. 提交所有本次功能及发布准备改动，确保 `v1.1.9` 标签指向最终源码提交。GitHub、Gitee 使用相同版本标签与源码。
-2. 分别创建 GitHub 和 Gitee 的 `v1.1.9` Release，标题为「三角狐 v1.1.9」。正文使用 `updates/release-notes-1.1.9.md`，两处上传同一个 `Sanjiaohu-1.1.9.apk`。可同时附上校验文件，勿上传密钥或整个构建目录。
-3. 两处附件可访问后再生成开启清单。若本地及线上修订号仍不超过 13，可用 14：
+1. 提交所有本次功能及发布准备改动，确保 `v1.2.1` 标签指向最终源码提交。GitHub、Gitee 使用相同版本标签与源码。
+2. 分别创建 GitHub 和 Gitee 的 `v1.2.1` Release，标题为「三角狐 v1.2.1」。正文使用 `updates/release-notes-1.2.1.md`，两处上传同一个 `Sanjiaohu-1.2.1.apk`。可同时附上校验文件，勿上传密钥或整个构建目录。
+3. 本次本地 stable 清单已启用，附件上传后执行以下命令验证三条下载线路：
 
 ```powershell
-./scripts/prepare-update.ps1 `
-  -Apk ./Sanjiaohu-1.1.9.apk `
-  -ManifestRevision 14 `
-  -NotesFile ./updates/release-notes-1.1.9.txt `
-  -Output ./updates/stable/version.json `
-  -Enable
-
-./scripts/verify-update.ps1 -Apk ./Sanjiaohu-1.1.9.apk -Offline
+./scripts/verify-update.ps1 -Apk ./Sanjiaohu-1.2.1.apk
 ```
 
-`-Enable` 会下载 Gitee、GitHub 加速和 GitHub 官方三条线路的文件，全部通过大小与 SHA-256 检查才写入开启清单。任何一条失败都保留原清单，应修复上传或线路问题后重试，不要手工绕过检查。
+校验会下载 Gitee、GitHub 加速和 GitHub 官方三条线路的文件，检查大小与 SHA-256。以后重新生成清单时使用 `prepare-update.ps1 -Enable` 并指定比本地及线上都大的修订号；该脚本会先验证下载文件，再写入开启清单。
 
 4. 提交并推送开启后的 `updates/stable/version.json` 到 `main`。只在本地保存或只上传 APK，都不能让旧版客户端收到更新。
 5. 用旧版手机检查更新、下载、确认安装，再核对版本与本地数据。

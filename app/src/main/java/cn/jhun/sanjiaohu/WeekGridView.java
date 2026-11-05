@@ -6,7 +6,8 @@ import android.view.ViewGroup;
 
 /** Children exist before measurement. No view mutation from layout callbacks. */
 public final class WeekGridView extends ViewGroup {
-    public static final int HEADER=0, TIME=1, CELL=2, EMPTY=3, BREAK=4;
+    public static final int HEADER=0, TIME=1, CELL=2, EMPTY=3, BREAK=4, EVENT=5, CLOCK=6, BAND=7, TIME_CELL=8;
+    TimetableTimeline timeline;
     private final int gutter,header,gap;
     public WeekGridView(Context context,int gutter,int header){this(context,gutter,header,0);}
     public WeekGridView(Context context,int gutter,int header,int gap){super(context);this.gutter=gutter;this.header=header;this.gap=gap;}
@@ -18,7 +19,7 @@ public final class WeekGridView extends ViewGroup {
         CellParams(int kind,int day,int start,int end,int lane,int lanes){super(0,0);this.kind=kind;this.day=day;this.start=start;this.end=end;this.lane=lane;this.lanes=lanes;}
     }
     private GridGeometry geometry(int w,int h){return new GridGeometry(w,h,gutter,header,gap);}
-    private int[] bounds(GridGeometry g,CellParams p){return g.bounds(p.kind,p.day,p.start,p.end,p.lane,p.lanes);}
+    private int[] bounds(GridGeometry g,CellParams p){return timeline==null?g.bounds(p.kind,p.day,p.start,p.end,p.lane,p.lanes):timeline.bounds(g,p.kind,p.day,p.start,p.end,p.lane,p.lanes);}
     @Override protected void onMeasure(int widthSpec,int heightSpec){
         int w=resolveSize(getSuggestedMinimumWidth(),widthSpec),h=resolveSize(getSuggestedMinimumHeight(),heightSpec);
         setMeasuredDimension(w,h);GridGeometry g=geometry(w,h);

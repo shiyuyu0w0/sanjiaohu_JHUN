@@ -14,8 +14,8 @@ import org.json.JSONObject;
 
 /** Seed on the published APK, then verify/restore after adb install -r of the final APK. */
 public final class UpgradeInstrumentation extends Instrumentation {
-    private static final String ID="release-upgrade-1.2.0",SENTINEL="releaseUpgradeSentinel";
-    private static final String[] FILES={"custom-courses.json","course-notes.properties","wallpaper.png"};
+    private static final String ID="release-upgrade-1.2.1",SENTINEL="releaseUpgradeSentinel";
+    private static final String[] FILES={"custom-courses.json","course-notes.properties","wallpaper.png","schedule-events.json"};
     private String phase;
     @Override public void onCreate(Bundle args){super.onCreate(args);phase=args.getString("phase","");start();}
     @Override public void onStart(){
@@ -25,7 +25,7 @@ public final class UpgradeInstrumentation extends Instrumentation {
             else if("verify".equals(phase))verify();
             else if("restore".equals(phase))restore();
             else throw new IllegalArgumentException("Expected phase=seed, verify or restore");
-            result.putString("stream","PASS: upgrade "+phase+" (custom course, note, wallpaper and preferences)\n");finish(-1,result);
+            result.putString("stream","PASS: upgrade "+phase+" (custom course, note, wallpaper, events and preferences)\n");finish(-1,result);
         }catch(Throwable error){result.putString("stream","FAIL: "+android.util.Log.getStackTraceString(error));finish(0,result);}
     }
     private Context context(){return getTargetContext();}
@@ -45,7 +45,7 @@ public final class UpgradeInstrumentation extends Instrumentation {
         for(byte b:digest)out.append(String.format(java.util.Locale.ROOT,"%02x",b&255));return out.toString();
     }
     private void seed()throws Exception{
-        version("1.1.9",52);require(!backup().exists()&&!settings().contains(SENTINEL),"restore previous upgrade fixture first");
+        version("1.2.0",53);require(!backup().exists()&&!settings().contains(SENTINEL),"restore previous upgrade fixture first");
         JSONObject state=new JSONObject(),original=new JSONObject();
         for(String name:FILES){File f=file(name);original.put(name,f.exists()?Base64.encodeToString(Files.readAllBytes(f.toPath()),Base64.NO_WRAP):JSONObject.NULL);}
         state.put("original",original);save(state);
@@ -58,18 +58,22 @@ public final class UpgradeInstrumentation extends Instrumentation {
                 try{WallpaperStore.save(context(),image);}finally{image.recycle();}
             }
             require(settings().edit().putString(SENTINEL,ID).commit(),"seed preferences");
+            // Test the event preview's v2 data too, without depending on classes absent in 1.2.0.
+            JSONObject event=new JSONObject().put("id",ID).put("term","自定义学期").put("date","2026-11-05").put("start",0).put("end",1439).put("title","旧日程保留").put("notes","升级后可调整时间");
+            write(file("schedule-events.json"),new JSONObject().put("version",2).put("events",new org.json.JSONArray().put(event)).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             JSONObject hashes=new JSONObject();for(String name:FILES)hashes.put(name,hash(file(name)));state.put("hashes",hashes);save(state);
         }catch(Exception|AssertionError error){restore();throw error;}
     }
     private void verify()throws Exception{
         try{
-            version("1.2.0",53);JSONObject hashes=read().getJSONObject("hashes");
+            version("1.2.1",54);JSONObject hashes=read().getJSONObject("hashes");
             for(String name:FILES)require(hashes.getString(name).equals(hash(file(name))),"upgrade changed "+name);
             require(ID.equals(settings().getString(SENTINEL,"")),"preferences lost");
             Course found=null;for(Course course:new CustomCourseStore(context()).load())if(ID.equals(course.localId))found=course;
             require(found!=null,"custom course lost");
             require("升级后备注仍保留".equals(new CourseNoteStore(context()).get(found,"*")),"course note lost");
             Bitmap image=WallpaperStore.load(context());require(image!=null,"wallpaper cannot decode");image.recycle();
+            List<ScheduleEvent> events=new ScheduleEventStore(context()).load();require(events.size()==1&&ID.equals(events.get(0).id)&&events.get(0).start==0&&events.get(0).end==1439,"legacy event cannot be read after upgrade");
         }finally{restore();}
     }
     private void restore()throws Exception{

@@ -31,6 +31,9 @@ public class MainActivity extends Activity {
     final Schedule localSchedule=Schedule.local();
     CustomCourseStore customStore;
     CourseNoteStore courseNoteStore;
+    ScheduleEventStore eventStore;
+    List<ScheduleEvent> events=new ArrayList<>();
+    boolean eventsReadError=false;
     List<Course> localCourses=new ArrayList<>();
     boolean customReadError=false,todayLabel=false,verified=false,autoTried=false,autoSubmitted=false,autoRunning=false,credentialBusy=false;
     boolean teachingSessionReady=false,teachingSessionRestoring=false;
@@ -95,6 +98,8 @@ public class MainActivity extends Activity {
         customStore=new CustomCourseStore(this);
         courseNoteStore=new CourseNoteStore(this);
         try{localCourses=customStore.load();}catch(Exception e){customReadError=true;}
+        eventStore=new ScheduleEventStore(this);
+        try{events=eventStore.load();}catch(Exception e){eventsReadError=true;}
         if(saved!=null){page=saved.getInt("page",DEFAULT_PAGE);todayLabel=saved.getBoolean("todayLabel",false);wallpaperAspect=saved.getFloat("wallpaperAspect",.65f);}
         if(getIntent().getBooleanExtra(TodayWidgetProvider.OPEN,false)){page=1;getIntent().removeExtra(TodayWidgetProvider.OPEN);}
         refreshAppearance();
@@ -794,6 +799,8 @@ public class MainActivity extends Activity {
         sheet.actions(this,"确认退出",()->{sheet.dialog.dismiss();clearCredentials(true);});showSheet(sheet);
     }
     int courseColor(Course c){String key="course-color:"+c.name;int index=prefs.getInt(key,-1);if(index<0){index=prefs.getInt("next-course-color",0);prefs.edit().putInt(key,index).putInt("next-course-color",index+1).apply();}return CourseColors.PALETTE[Math.floorMod(index,CourseColors.PALETTE.length)];}
+    // Every empty time band must reveal the same continuous wallpaper.
+    int timetableSurface(int plainColor){return wallpaper==null?plainColor:(palette.dark?0x15000000:0x15ffffff);}
     View weekView(){
         WeekGridView grid=new WeekGridView(this,dp(33),dp(32),dp(14));grid.setBackground(wallpaper==null?shape(palette.gridSurface,12):new WallpaperDrawable(wallpaper,dp(33),dp(32),palette.gridSurface,palette.wallpaperScrim));
         String[] days={"一","二","三","四","五","六","日"};LocalDate a=anchor();
@@ -805,20 +812,30 @@ public class MainActivity extends Activity {
             else h.setBackground(shape(palette.gridSurface,7));
             grid.add(h,WeekGridView.HEADER,d,1,1,0,1);
         }
+        boolean calibrated=a!=null;List<Course> courses=calibrated?CustomCourses.at(activeSchedule().courses,localCourses,activeSchedule().term,selectedWeek):CustomCourses.all(activeSchedule().courses,localCourses,activeSchedule().term);
+        List<ScheduleEvent> weekEvents=ScheduleEvent.inWeek(events,activeSchedule().term,monday);
+        TimetableTimeline timeline=new TimetableTimeline(activeSchedule());grid.timeline=timeline;
         for(int p=1;p<=12;p++){
             TextView time=periodLabel(p);grid.add(time,WeekGridView.TIME,1,p,p,0,1);
-            for(int d=1;d<=7;d++){View cell=new View(this);cell.setBackground(shape(wallpaper==null?BG:(palette.dark?0x15000000:0x15ffffff),5));grid.add(cell,WeekGridView.CELL,d,p,p,0,1);}
+            for(int d=1;d<=7;d++){
+                View cell=new View(this);cell.setBackground(shape(timetableSurface(BG),5));
+                boolean occupied=false;for(Course c:courses)if(c.day==d&&c.start<=p&&c.end>=p){occupied=true;break;}
+                for(ScheduleEvent event:weekEvents)if(event.date.getDayOfWeek().getValue()==d&&event.start<=timeline.starts[p]&&event.end>=timeline.ends[p])occupied=true;
+                if(!occupied){final LocalDate date=monday.plusDays(d-1);final int period=p;cell.setFocusable(true);cell.setContentDescription(date+"，第 "+p+" 节，添加日程");cell.setOnClickListener(v->{Ui.tap(v);editEvent(null,date,period);});}
+                grid.add(cell,WeekGridView.CELL,d,p,p,0,1);
+            }
         }
-        boolean calibrated=a!=null;List<Course> courses=calibrated?CustomCourses.at(activeSchedule().courses,localCourses,activeSchedule().term,selectedWeek):CustomCourses.all(activeSchedule().courses,localCourses,activeSchedule().term);Map<Course,Integer> lanes=new IdentityHashMap<>(),counts=new IdentityHashMap<>();
-        for(int d=1;d<=7;d++){List<Course> cluster=new ArrayList<>();int end=0;for(Course c:courses){if(c.day!=d)continue;if(!cluster.isEmpty()&&c.start>end){assign(cluster,lanes,counts);cluster.clear();}cluster.add(c);end=Math.max(cluster.size()==1?0:end,c.end);}assign(cluster,lanes,counts);}
-        for(Course c:courses)for(int segmentStart=c.start;segmentStart<=c.end;segmentStart=((segmentStart-1)/4+1)*4+1){
-            int segmentEnd=Math.min(c.end,((segmentStart-1)/4+1)*4);
-            int cardColor=courseColor(c);CourseCardView card=new CourseCardView(this);card.setText(c.name+"\n"+c.room);card.setTextSize(calibrated?10:9);card.setTextColor(INK);card.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));card.setTag(cardColor);visibleCards.add(card);card.setPadding(dp(calibrated?2:1),dp(2),dp(calibrated?2:1),dp(2));card.setGravity(Gravity.CENTER);card.setIncludeFontPadding(false);card.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);card.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
+        for(TimetableTimeline.Band band:timeline.bands){
+            TextView gap=label(band.label+"  "+ScheduleEvent.time(band.start)+"–"+ScheduleEvent.time(band.end),8,palette.deepAccent,false);gap.setGravity(Gravity.CENTER);gap.setIncludeFontPadding(false);gap.setBackgroundColor(timetableSurface(palette.controlSurface));grid.add(gap,WeekGridView.BAND,1,band.start,band.end,0,1);
+        }
+        for(TimetableEntry entry:TimetableEntry.create(courses,weekEvents,activeSchedule())){
+            Course c=entry.course;ScheduleEvent event=entry.event;
+            int cardColor=event==null?courseColor(c):CourseColors.PALETTE[Math.floorMod(event.id.hashCode(),CourseColors.PALETTE.length)];CourseCardView card=new CourseCardView(this);card.setText(entry.title()+"\n"+(event==null?c.room:event.interval()));card.setTextSize(calibrated?10:9);card.setTextColor(INK);card.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));card.setTag(cardColor);visibleCards.add(card);card.setPadding(dp(calibrated?2:1),dp(2),dp(calibrated?2:1),dp(2));card.setGravity(Gravity.CENTER);card.setIncludeFontPadding(false);card.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);card.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
             card.setAutoSizeTextTypeUniformWithConfiguration(calibrated?6:5,calibrated?11:10,1,android.util.TypedValue.COMPLEX_UNIT_SP);styleCourseCard(card,cardColor,transparency());
-            card.setContentDescription(c.name+"，"+c.room+"，第"+c.start+"至"+c.end+"节"+(calibrated?"":"，第 "+c.weekText+" 周")+"，点按查看完整详情");card.setFocusable(true);card.setOnClickListener(v->detail(c));grid.add(card,WeekGridView.CELL,c.day,segmentStart,segmentEnd,lanes.get(c),counts.get(c));
+            if(event!=null){android.text.SpannableString text=new android.text.SpannableString(event.title+"\n"+event.interval());text.setSpan(new android.text.style.RelativeSizeSpan(.65f),event.title.length()+1,text.length(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);card.setText(text);}
+            card.setContentDescription((event!=null?event.title+"，日程，"+event.interval()+"，"+event.date:c.name+"，"+c.room+"，第"+c.start+"至"+c.end+"节"+(calibrated?"":"，第 "+c.weekText+" 周"))+"，点按查看完整详情");card.setFocusable(true);card.setOnClickListener(v->{if(event==null)detail(c);else{Ui.tap(v);ScheduleEventEditor.showDetail(this,event);}});grid.add(card,WeekGridView.EVENT,entry.day,entry.start,entry.end,entry.lane,entry.lanes);
         }
-        for(int after:new int[]{4,8}){String title=after==4?"午休":"晚餐";TextView gap=label(title+"  "+activeSchedule().ends[after]+"–"+activeSchedule().starts[after+1],8,palette.deepAccent,false);gap.setGravity(Gravity.CENTER);gap.setIncludeFontPadding(false);gap.setBackgroundColor(palette.controlSurface);grid.add(gap,WeekGridView.BREAK,1,after,after,0,1);}
-        if(courses.isEmpty()){TextView free=label(schedule==null?"暂无该学期课表，联网后获取":calibrated?"这一周没有课程安排":"该学期没有课程安排",14,ACCENT_TEXT,true);free.setGravity(Gravity.CENTER);free.setShadowLayer(dp(3),0,0,palette.dark?Color.BLACK:Color.WHITE);grid.add(free,WeekGridView.EMPTY,1,1,12,0,1);}
+        if(courses.isEmpty()&&weekEvents.isEmpty()){TextView free=label((schedule==null?"暂无该学期课表，联网后获取":calibrated?"这一周没有课程安排":"该学期没有课程安排")+"\n点按空白格添加日程",14,ACCENT_TEXT,true);free.setGravity(Gravity.CENTER);free.setShadowLayer(dp(3),0,0,palette.dark?Color.BLACK:Color.WHITE);grid.add(free,WeekGridView.EMPTY,1,1,12,0,1);}
         return grid;
     }
     TextView periodLabel(int period){
@@ -845,6 +862,9 @@ public class MainActivity extends Activity {
     void detail(Course c){Ui.tap(root);CourseDetailSheet.show(this,c);}
     boolean saveCustom(List<Course> next){try{customStore.save(next);localCourses=next;render();return true;}catch(Exception e){Toast.makeText(this,"保存失败，原有自定义课程未改动",Toast.LENGTH_LONG).show();return false;}}
     void editCustom(Course existing){if(customReadError){Toast.makeText(this,"原自定义课程文件无法读取，暂时停止写入以免覆盖",Toast.LENGTH_LONG).show();return;}new CourseEditor(this,existing);}
+    ScheduleEventEditor eventEditor;
+    void editEvent(ScheduleEvent existing,LocalDate date,int period){if(eventsReadError){Toast.makeText(this,"日程暂时无法读取，请重新打开应用后重试",Toast.LENGTH_LONG).show();return;}eventEditor=new ScheduleEventEditor(this,existing,date,period);}
+    boolean saveEvents(List<ScheduleEvent> next){if(eventsReadError)return false;try{eventStore.save(next);events=next;render();return true;}catch(Exception e){Toast.makeText(this,"保存失败，原有日程未改动",Toast.LENGTH_LONG).show();return false;}}
     void showSheet(UiSheet sheet){if(activeSheet!=null)activeSheet.dismiss();activeSheet=sheet.dialog;sheet.dialog.setOnDismissListener(d->{if(activeSheet==sheet.dialog)activeSheet=null;});sheet.show(this);}
     int transparency(){return CourseAppearance.clamp(prefs.getInt("courseTransparency",0));}
     void styleCourseCard(CourseCardView card,int color,int transparency){card.setBackground(shape(CourseAppearance.background(color,transparency),6));card.setAppearance(color,transparency,BG);}
