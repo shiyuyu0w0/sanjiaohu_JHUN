@@ -65,7 +65,8 @@ public class MainActivity extends Activity {
     WebView web;
     Schedule schedule;
     JSONObject scheduleCandidate;
-    String schedulePortalScript,scheduleListScript,scheduleStage="";
+    String schedulePortalScript,scheduleListScript,scheduleTeacherScript,scheduleStage="";
+    boolean checkingTeacherChanges;
     AcademicStore academicStore;
     Grades grades,summaryGrades;
     Exams exams;
@@ -104,7 +105,7 @@ public class MainActivity extends Activity {
         if(getIntent().getBooleanExtra(TodayWidgetProvider.OPEN,false)){page=1;getIntent().removeExtra(TodayWidgetProvider.OPEN);}
         refreshAppearance();
         cache=new AtomicFile(new File(getFilesDir(),"schedule.json"));
-        try {loginStateScript=read(getAssets().open("login-state.js"));loginSubmitScript=read(getAssets().open("login-submit.js"));schedulePortalScript=read(getAssets().open("schedule-portal.js"));scheduleListScript=read(getAssets().open("schedule-list.js"));} catch(Exception e) {throw new IllegalStateException("课表适配器缺失",e);}
+        try {loginStateScript=read(getAssets().open("login-state.js"));loginSubmitScript=read(getAssets().open("login-submit.js"));schedulePortalScript=read(getAssets().open("schedule-portal.js"));scheduleListScript=read(getAssets().open("schedule-list.js"));scheduleTeacherScript=read(getAssets().open("schedule-teacher-changes.js"));} catch(Exception e) {throw new IllegalStateException("课表适配器缺失",e);}
         try {
             JSONObject data=new JSONObject(new String(cache.readFully(),StandardCharsets.UTF_8));
             if(CachePolicy.usable(data.optLong("savedAt",0),data.optString("source",""))) {
@@ -285,13 +286,18 @@ public class MainActivity extends Activity {
             }catch(Exception e){authServiceFailure("学校登录页面暂时无法读取 · 已保留本地课表，可稍后刷新重试");}
         });
     }
-    void startPoll(){if(busy)return;busy=true;int token=++generation;deadline=android.os.SystemClock.elapsedRealtime()+(jobKind.equals("exams")?120000:45000);setState("正在更新"+(jobKind.equals("exams")?"考试安排":jobKind.equals("summary")?"汇总":jobKind.equals("grades")?"成绩":"课表")+" · 本地记录随时可看");handler.postDelayed(()->poll(token),600);}
+    void startPoll(){if(busy)return;busy=true;checkingTeacherChanges=false;int token=++generation;deadline=android.os.SystemClock.elapsedRealtime()+(jobKind.equals("exams")?120000:45000);setState("正在更新"+(jobKind.equals("exams")?"考试安排":jobKind.equals("summary")?"汇总":jobKind.equals("grades")?"成绩":"课表")+" · 本地记录随时可看");handler.postDelayed(()->poll(token),600);}
+    String scheduleQuery(int token){
+        JSONArray cached=null;
+        if(schedule!=null&&schedule.json!=null&&Term.same(jobTerm,schedule.term))cached=schedule.json.optJSONArray("teacherChanges");
+        return schedulePortalScript+"("+token+","+JSONObject.quote(jobTerm)+","+scheduleListScript+","+scheduleTeacherScript+","+(cached==null?"[]":cached.toString())+")";
+    }
     void poll(int token){
         if(token!=generation || !busy || inBackground)return;
         if(android.os.SystemClock.elapsedRealtime()>deadline){fail((jobKind.equals("schedule")?scheduleStage+" · ":"")+"更新超时 · 已保留本地课表");return;}
         if(loadError){fail("连接失败 · 已保留本地课表");return;}
         if(!mainLoaded || !sourceOrigin(web.getUrl())){handler.postDelayed(()->poll(token),700);return;}
-        String query=jobKind.equals("schedule")?schedulePortalScript+"("+token+","+JSONObject.quote(jobTerm)+","+scheduleListScript+")":jobKind.equals("exams")?examPortalScript+"("+token+","+JSONObject.quote(jobTerm)+","+parserScript+")":portalScript+"("+token+","+JSONObject.quote(jobKind)+","+JSONObject.quote(jobTerm)+","+parserScript+")";
+        String query=jobKind.equals("schedule")?scheduleQuery(token):jobKind.equals("exams")?examPortalScript+"("+token+","+JSONObject.quote(jobTerm)+","+parserScript+")":portalScript+"("+token+","+JSONObject.quote(jobKind)+","+JSONObject.quote(jobTerm)+","+parserScript+")";
         web.evaluateJavascript(query,result->{
             if(token!=generation || !busy)return;
             try {
@@ -302,7 +308,12 @@ public class MainActivity extends Activity {
                     if(error.equals("login")){tryAutoLogin(token);return;}
                     if(error.equals("unavailable")){fail("教务系统未提供该学期 · 已保留上次记录");return;}
                     if(jobKind.equals("schedule")){
-                        scheduleStage=scheduleStageLabel(obj.optString("stage"));
+                        String stage=obj.optString("stage");
+                        if(stage.equals("teacher-changes")&&!checkingTeacherChanges){
+                            checkingTeacherChanges=true;
+                            deadline=Math.max(deadline,SystemClock.elapsedRealtime()+10000);
+                        }
+                        scheduleStage=scheduleStageLabel(stage);
                         if(error.equals("structure")){fail(scheduleStage+" · 已保留本地课表");return;}
                         setState(scheduleStage+" · 本地记录随时可看");handler.postDelayed(()->poll(token),700);return;
                     }
@@ -320,7 +331,14 @@ public class MainActivity extends Activity {
                     gradeState="已保存到本地 · "+stamp(grades.savedAt);
                 }else{
                     Schedule fresh=new Schedule(obj);
-                    if(academicStore.stageSchedule(obj)){schedule=fresh;scheduleCandidate=null;state="已使用新课表 · "+stamp(schedule.savedAt);}
+                    if(academicStore.stageSchedule(obj)){
+                        schedule=fresh;scheduleCandidate=null;
+                        state="已使用新课表 · "+stamp(schedule.savedAt);
+                        String teacherSync=obj.optString("teacherSync");
+                        if(teacherSync.equals("unavailable"))state+=" · 调课信息暂不可用";
+                        else if(teacherSync.equals("partial"))state+=" · "+teacherSyncWarning(obj.optJSONArray("teacherMatchIssues"));
+                        else if(obj.optBoolean("teacherUpdated"))state+=" · 授课教师已同步";
+                    }
                     else{scheduleCandidate=obj;state=schedule==null?"部分课程未能解析 · 请查看详情":"部分课程未能解析 · 当前课表已保留";}
                 }
                 authenticated();busy=false;generation++;CookieManager.getInstance().flush();render();refreshSummary();
@@ -328,6 +346,19 @@ public class MainActivity extends Activity {
         });
     }
     void setState(String s){if(jobKind.equals("exams"))examState=s.replace("本地课表","本地考试安排");else if(jobKind.equals("summary"))summaryState=s.replace("本地课表","本地汇总");else if(jobKind.equals("grades"))gradeState=s.replace("本地课表","本地成绩");else state=s;if(stateText!=null)stateText.setText(page==4?examState:page==3?gradeState:state);if(authStatusText!=null)authStatusText.setText(authStatus());refreshSummary();}
+    static String teacherSyncWarning(JSONArray issues){
+        if(issues==null||issues.length()==0)return "部分调课信息未能核对";
+        Set<String> reasons=new LinkedHashSet<>();
+        for(int i=0;i<issues.length();i++)switch(issues.optString(i)){
+            case "class-mismatch":reasons.add("班级不符");break;
+            case "slot-mismatch":reasons.add("上课时段或地点不符");break;
+            case "ambiguous-slot":reasons.add("课次有重叠");break;
+            case "teacher-mismatch":reasons.add("原教师不符");break;
+            case "notice-conflict":reasons.add("通知有冲突");break;
+            case "term-mismatch":reasons.add("学期不符");break;
+        }
+        return reasons.isEmpty()?"部分教师变更未应用":"部分教师变更未应用（"+String.join("、",reasons)+"）";
+    }
     void fail(String reason){automaticCredentials=null;autoRunning=false;autoSubmitted=false;busy=false;generation++;if(jobKind.equals("exams")?exams==null:jobKind.equals("summary")?summaryGrades==null:jobKind.equals("grades")?grades==null:schedule==null)reason=reason.replace("已保留本地课表","暂无缓存，可稍后重试").replace("已保留上次记录","暂无缓存，可稍后重试");setState(reason);}
     void showLogin(){if(credentialBusy)return;teachingSessionGeneration++;teachingSessionRestoring=false;teachingSessionReady=true;generation++;busy=false;automaticCredentials=null;autoRunning=false;web.stopLoading();verified=false;startActivityForResult(new Intent(this,LoginActivity.class),20);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==30 && result==RESULT_OK && data!=null && data.getData()!=null){importWallpaper(data.getData());}
@@ -481,6 +512,7 @@ public class MainActivity extends Activity {
         return banner;
     }
     String scheduleStageLabel(String stage){
+        if(stage.equals("teacher-changes"))return "正在核对教师变更";
         switch(stage){case "schedule-menu":return "正在打开教学安排";case "schedule-tab":return "正在打开个人课表";case "schedule-form":return "等待课表查询表单";case "term-loading":case "term-switching":return "正在切换目标学期";case "list-switching":return "正在切换列表视图";case "list-switch-failed":return "列表视图未能切换";case "report-pagination":return "等待课表所有分页";case "report-not-found":return "等待课程列表";case "empty-unconfirmed":return "等待学校确认空课表";case "report-settling":return "正在校验课表完整性";case "term-mismatch":case "selection-changed":return "课表学期尚未匹配";case "table-structure":case "rows-unreadable":return "课表列表格式无法识别";case "report-error":return "学校课表查询失败";default:return "正在加载列表课表";}
     }
     void reviewSchedule(){

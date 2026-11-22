@@ -18,6 +18,7 @@ $manifest = @'
     <instrumentation android:name="cn.jhun.sanjiaohu.UpgradeInstrumentation" android:targetPackage="cn.jhun.sanjiaohu" />
     <instrumentation android:name="cn.jhun.sanjiaohu.WidgetInstrumentation" android:targetPackage="cn.jhun.sanjiaohu" />
     <instrumentation android:name="cn.jhun.sanjiaohu.ScheduleEventInstrumentation" android:targetPackage="cn.jhun.sanjiaohu" />
+    <instrumentation android:name="cn.jhun.sanjiaohu.ScheduleSyncInstrumentation" android:targetPackage="cn.jhun.sanjiaohu" />
     <instrumentation android:name="cn.jhun.sanjiaohu.TimeWheelInstrumentation" android:targetPackage="cn.jhun.sanjiaohu" />
     <instrumentation android:name="cn.jhun.sanjiaohu.EventWallpaperInstrumentation" android:targetPackage="cn.jhun.sanjiaohu" />
 </manifest>

@@ -14,6 +14,21 @@
   function activityHeader(row){var c=columns(row);return row.some(function(v){return compact(v)==='环节';})&&c.name>=0&&c.credits>=0&&c.weeks>=0&&c.room>=0;}
   function hiddenCell(c){var view=c.ownerDocument&&c.ownerDocument.defaultView;return c.hidden||(c.style&&c.style.display==='none')||(view&&view.getComputedStyle(c).display==='none');}
   function displayName(s){return clean(s.replace(/^\[[^\]]+\]\s*/,''));}
+  function schoolCode(value){return value.length<=40&&/^[0-9A-Za-z]+(?:-[0-9A-Za-z]+)*$/.test(value);}
+  function codedName(s){
+    var match=clean(s).match(/^\[([^\]\r\n]+)\]\s*([\s\S]+)$/);
+    return match&&schoolCode(match[1])?{code:match[1],name:clean(match[2])}:null;
+  }
+  function classKey(code,number){return schoolCode(code)&&/^\d{1,8}$/.test(number)?code+'-'+number.replace(/^0+(?=\d)/,''):'';}
+  function pagesComplete(body){
+    var numbers=new Set(),total=0,match,pattern=/第\s*(\d+)\s*页\s*共\s*(\d+)\s*页/g;
+    while((match=pattern.exec(body))!==null){
+      var page=+match[1],count=+match[2];
+      if(!count||page<1||page>count||(total&&total!==count))return false;
+      total=count;numbers.add(page);
+    }
+    return numbers.size===total;
+  }
   function grid(table){
     var result=[],spans=[];
     Array.from(table.rows).forEach(function(row){var cells=[],index=0;spans.forEach(function(span,i){if(span&&span.left>0){cells[i]=span.value;span.left--;}});
@@ -52,12 +67,11 @@
     var body=text(doc.body),actual=term(body);if(actual&&actual.label!==target.label)return {error:'waiting',stage:'term-mismatch'};
     if(/正在加载|正在查询|查询中|请稍候/.test(body))return {error:'waiting',stage:'report-loading'};
     if(/系统错误|查询失败|服务器异常|登录超时/.test(body))return {error:'structure',stage:'report-error'};
-    var pages=[],pattern=/第\s*(\d+)\s*页\s*共\s*(\d+)\s*页/g,match;
-    while((match=pattern.exec(body))!==null)pages.push([+match[1],+match[2]]);
-    if(pages.length){var total=pages[0][1],seenPages=new Set(pages.map(function(p){return p[0];}));if(total<1||pages.some(function(p){return p[1]!==total;})||seenPages.size!==total)return {error:'incomplete',stage:'report-pagination'};for(var p=1;p<=total;p++)if(!seenPages.has(p))return {error:'incomplete',stage:'report-pagination'};}
+    if(!pagesComplete(body))return {error:'incomplete',stage:'report-pagination'};
     var summary=body.match(/(?:课程门数|课程数量|课程数)\s*[:：]?\s*(\d+)/),expected=summary?+summary[1]:null;
     var result={version:2,complete:true,term:target.label,maxWeek:20,courses:[],issues:[],unscheduled:[],ignoredZero:0,merged:0,reportRows:0},found=false;
     try{Array.from(doc.querySelectorAll('table')).forEach(function(table){var rows=grid(table),header=rows.findIndex(function(r){return courseHeader(columns(r))||activityHeader(r);});if(header<0)return;found=true;var cols=columns(rows[header]),activity=activityHeader(rows[header]);
+      var classColumn=rows[header].findIndex(function(value){return compact(value)==='上课班级代码';});
       rows.slice(header+1).forEach(function(row){
         if(courseHeader(columns(row))||activityHeader(row)||!row.some(function(c){return clean(c);}))return;
         if(/^合计|^总计|^课程门数/.test(clean(row[0])))return;
@@ -67,7 +81,14 @@
         if(activity){result.unscheduled.push({name:name,teacher:teacher,note:(get('weeks')?'第 '+get('weeks')+' 周 · ':'')+get('room')+'（未公布星期和节次）'});return;}
         if(!get('day')&&!/(?:星期|周)\s*[一二三四五六日天1-7]|[一二三四五六日天]\s*\[/.test(raw)&&/超星|学习通|雨课堂|网络课|线上课|慕课/.test(raw)){result.unscheduled.push({name:name,teacher:teacher,note:raw});return;}
         if((!raw&&!get('day'))||/^(?:无|待定|未安排|另行通知|网络课程|线上课程|慕课|不排课|时间待定)$/.test(raw)){result.unscheduled.push({name:name,teacher:teacher,note:raw||'未公布上课安排'});return;}
-        try{var parsed=arrangements(raw,{weeks:get('weeks'),room:get('room'),day:get('day'),period:get('period')});parsed.forEach(function(c){if(c.zero){result.ignoredZero++;return;}if(c.unscheduled){result.unscheduled.push({name:name,teacher:teacher,note:c.note});return;}c.name=name;c.teacher=teacher;result.courses.push(c);});}
+        var courseId=codedName(get('name')),teacherId=codedName(get('teacher'));
+        var classNumber=classColumn>=0&&clean(row[classColumn]).match(/^([0-9A-Za-z]+(?:-[0-9A-Za-z]+)*)-(\d{1,8})$/);
+        try{var parsed=arrangements(raw,{weeks:get('weeks'),room:get('room'),day:get('day'),period:get('period')});parsed.forEach(function(c){if(c.zero){result.ignoredZero++;return;}if(c.unscheduled){result.unscheduled.push({name:name,teacher:teacher,note:c.note});return;}c.name=name;c.teacher=teacher;
+          var key=courseId&&classNumber&&schoolCode(classNumber[1])&&classKey(courseId.code,classNumber[2]);
+          if(key)c.classKey=key;
+          if(teacherId&&teacherId.name===teacher&&!/[\[\]\r\n,，、；;]/.test(teacher))c.teacherCode=teacherId.code;
+          result.courses.push(c);
+        });}
         catch(e){result.issues.push({name:name,reason:e.message,arrangement:raw.slice(0,600)});}
       });
     });}catch(e){return {error:'structure',stage:'table-structure'};}
@@ -76,9 +97,9 @@
     if(!found&&!explicitEmpty)return {error:'waiting',stage:'report-not-found'};
     if(!result.reportRows&&!explicitEmpty)return {error:'waiting',stage:'empty-unconfirmed'};
     if(result.issues.length&&!result.courses.length)return {error:'structure',stage:'rows-unreadable'};
-    var unique={};result.courses.forEach(function(c){var key=JSON.stringify([c.name,c.teacher,c.day,c.start,c.end,c.room]);if(unique[key]){unique[key].weekText=Array.from(new Set(unique[key].weekText.split(',').concat(c.weekText.split(',')))).map(Number).sort(function(a,b){return a-b;}).join(',');result.merged++;}else unique[key]=c;});
+    var unique={};result.courses.forEach(function(c){var key=JSON.stringify([c.name,c.teacher,c.classKey,c.teacherCode,c.day,c.start,c.end,c.room]);if(unique[key]){unique[key].weekText=Array.from(new Set(unique[key].weekText.split(',').concat(c.weekText.split(',')))).map(Number).sort(function(a,b){return a-b;}).join(',');result.merged++;}else unique[key]=c;});
     result.courses=Object.keys(unique).sort().map(function(k){return unique[k];});result.courses.forEach(function(c){c.weekText.split(',').forEach(function(w){result.maxWeek=Math.max(result.maxWeek,+w);});});
     result.requiresReview=result.issues.length>0;return result;
   }
-  return {term:term,documents:documents,school:school,parse:parse,weeks:weeks,arrangements:arrangements};
+  return {term:term,documents:documents,school:school,parse:parse,weeks:weeks,arrangements:arrangements,pagesComplete:pagesComplete,codedName:codedName,classKey:classKey};
 })()

@@ -57,7 +57,7 @@ final class CourseDetailSheet {
         input.setContentDescription("课程备注内容");
         input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         input.setGravity(Gravity.TOP|Gravity.START);input.setMinLines(5);input.setMaxLines(10);
-        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(CourseNotes.MAX_LENGTH)});
+        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(CourseNotes.limit(original))});
         input.setPadding(a.dp(14),a.dp(13),a.dp(14),a.dp(13));input.setText(original);
         input.setBackground(noteBackground(a,false));input.setOnFocusChangeListener((v,focused)->input.setBackground(noteBackground(a,focused)));
         sheet.body.addView(input,new LinearLayout.LayoutParams(-1,-2));
