@@ -14,7 +14,8 @@ import org.json.JSONObject;
 
 /** Seed on the published APK, then verify/restore after adb install -r of the final APK. */
 public final class UpgradeInstrumentation extends Instrumentation {
-    private static final String ID="release-upgrade-1.2.1",SENTINEL="releaseUpgradeSentinel";
+    private static final String ID="release-upgrade-1.2.2",SENTINEL="releaseUpgradeSentinel";
+    private static final String TERM="2026-2027学年第一学期";
     private static final String[] FILES={"custom-courses.json","course-notes.properties","wallpaper.png","schedule-events.json"};
     private String phase;
     @Override public void onCreate(Bundle args){super.onCreate(args);phase=args.getString("phase","");start();}
@@ -45,20 +46,22 @@ public final class UpgradeInstrumentation extends Instrumentation {
         for(byte b:digest)out.append(String.format(java.util.Locale.ROOT,"%02x",b&255));return out.toString();
     }
     private void seed()throws Exception{
-        version("1.2.0",53);require(!backup().exists()&&!settings().contains(SENTINEL),"restore previous upgrade fixture first");
+        version("1.2.1",54);require(!backup().exists()&&!settings().contains(SENTINEL),"restore previous upgrade fixture first");
         JSONObject state=new JSONObject(),original=new JSONObject();
         for(String name:FILES){File f=file(name);original.put(name,f.exists()?Base64.encodeToString(Files.readAllBytes(f.toPath()),Base64.NO_WRAP):JSONObject.NULL);}
         state.put("original",original);save(state);
         try{
             CustomCourseStore store=new CustomCourseStore(context());List<Course> courses=store.load();
             Course course=CustomCourses.create(ID,"*","升级保留测试","测试教师","测试教室",1,1,2,"1-16");courses.add(course);store.save(courses);
-            new CourseNoteStore(context()).save(course,"*","升级后备注仍保留");
+            CourseNoteStore notes=new CourseNoteStore(context());
+            notes.save(course,"*","升级后备注仍保留");
+            notes.save(importedCourse("原教师"),TERM,"换老师后保留旧备注");
             if(!WallpaperStore.file(context()).exists()){
                 Bitmap image=Bitmap.createBitmap(20,32,Bitmap.Config.ARGB_8888);image.eraseColor(0xff159aca);
                 try{WallpaperStore.save(context(),image);}finally{image.recycle();}
             }
             require(settings().edit().putString(SENTINEL,ID).commit(),"seed preferences");
-            // Test the event preview's v2 data too, without depending on classes absent in 1.2.0.
+            // Include a legacy event outside the current time range.
             JSONObject event=new JSONObject().put("id",ID).put("term","自定义学期").put("date","2026-11-05").put("start",0).put("end",1439).put("title","旧日程保留").put("notes","升级后可调整时间");
             write(file("schedule-events.json"),new JSONObject().put("version",2).put("events",new org.json.JSONArray().put(event)).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             JSONObject hashes=new JSONObject();for(String name:FILES)hashes.put(name,hash(file(name)));state.put("hashes",hashes);save(state);
@@ -66,15 +69,20 @@ public final class UpgradeInstrumentation extends Instrumentation {
     }
     private void verify()throws Exception{
         try{
-            version("1.2.1",54);JSONObject hashes=read().getJSONObject("hashes");
+            version("1.2.2",55);JSONObject hashes=read().getJSONObject("hashes");
             for(String name:FILES)require(hashes.getString(name).equals(hash(file(name))),"upgrade changed "+name);
             require(ID.equals(settings().getString(SENTINEL,"")),"preferences lost");
             Course found=null;for(Course course:new CustomCourseStore(context()).load())if(ID.equals(course.localId))found=course;
             require(found!=null,"custom course lost");
-            require("升级后备注仍保留".equals(new CourseNoteStore(context()).get(found,"*")),"course note lost");
+            CourseNoteStore notes=new CourseNoteStore(context());
+            require("升级后备注仍保留".equals(notes.get(found,"*")),"course note lost");
+            require("换老师后保留旧备注".equals(notes.get(importedCourse("新教师"),TERM)),"legacy school note lost after teacher change");
             Bitmap image=WallpaperStore.load(context());require(image!=null,"wallpaper cannot decode");image.recycle();
             List<ScheduleEvent> events=new ScheduleEventStore(context()).load();require(events.size()==1&&ID.equals(events.get(0).id)&&events.get(0).start==0&&events.get(0).end==1439,"legacy event cannot be read after upgrade");
         }finally{restore();}
+    }
+    private Course importedCourse(String teacher){
+        Course course=new Course();course.name=ID;course.teacher=teacher;return course;
     }
     private void restore()throws Exception{
         JSONObject original=read().getJSONObject("original");

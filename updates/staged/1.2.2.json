@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "manifestRevision": 22,
+  "enabled": false,
+  "channel": "stable",
+  "packageName": "cn.jhun.sanjiaohu",
+  "versionCode": 55,
+  "versionName": "1.2.2",
+  "minSdk": 26,
+  "releaseNotes": [
+    "修复换老师后部分课次仍显示原授课教师的问题",
+    "逐条核对调课通知的学期和排课，处理连续换老师的情况，无法匹配时提示原因",
+    "教务课程备注按同一学期的课程名保存和查看，换老师后仍可查看旧备注",
+    "关于页新增开发赞赏，感谢 Isri3595 和 Young"
+  ],
+  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.2.2",
+  "apk": {
+    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.2/Sanjiaohu-1.2.2.apk",
+    "gitee": "https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.2/Sanjiaohu-1.2.2.apk",
+    "sizeBytes": 2668117,
+    "sha256": "bcbaf263b96790c1662be0b1c62d158b97da37a149c5c9e3dd4e590b819bb62a",
+    "mirrors": [
+      {
+        "id": "ghproxy",
+        "name": "Accelerated",
+        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.2/Sanjiaohu-1.2.2.apk"
+      }
+    ]
+  }
+}

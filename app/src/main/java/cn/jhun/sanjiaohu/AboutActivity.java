@@ -18,6 +18,7 @@ import java.io.InputStream;
 public final class AboutActivity extends Activity {
     /** Main changes in each released version, newest first. */
     static final String[][] UPDATES={
+        {"v1.2.2","- 修复换老师后部分课次仍显示原授课教师的问题。\n- 逐条核对调课通知的学期和排课，处理连续换老师的情况，无法匹配时提示原因。\n- 教务课程备注按同一学期的课程名保存和查看，换老师后仍可查看旧备注。\n- 关于页新增开发赞赏，感谢 Isri3595 和 Young。"},
         {"v1.2.1","- 新增单次日程，点击课表空白格即可填写标题和备注，仅在选定日期显示。\n- 日程支持在 08:20–21:40 内按分钟选择时间，滑动选择器适配主题与深色模式。\n- 长日程直接跨格显示，保持课表格子大小，修复背景图片被横条遮挡的问题。\n- 保存前检查当天课程冲突，提示冲突课程并保留已填写内容。\n- 支持查看、编辑和删除日程，本地保存，不受教务课表更新影响。"},
         {"v1.2.0","- 新增 4×2 今日课表桌面小组件，展示当天课程和上课状态，支持自定义图片裁切、深浅色适配，点击直达课表。\n- 优化首页、个人、图书查询和电费布局，教务账号与自动登录设置合并展示。\n- 优化斜向切页、底栏滑动、按钮回弹与弹层动效，遵循系统动画设置。\n- 完整的新课表获取成功后自动使用，解析不完整时保留本地记录。\n- 精简主题调色，移除预设颜色，保留色盘、明暗、颜色代码和跟随背景主色。\n- 优化小屏和大字体下的课表时间栏与周次校准按钮显示。"},
         {"v1.1.9","- 默认打开课表，首页、课程与个人切换更流畅。\n- 优化页面进入、翻周与弹层动效，加入底栏图标回弹。\n- 页面切换、切周和课程详情等操作增加轻触震动反馈。\n- 修复切换到未校准课表后，背景图片右侧出现留白的问题。\n- 优化教务登录提示，网络或学校服务异常不再误判为密码错误。\n- 优化图书查询的内容间距与页面布局。"},
@@ -60,7 +61,7 @@ public final class AboutActivity extends Activity {
         ImageView code=new ImageView(this);code.setAdjustViewBounds(true);code.setScaleType(ImageView.ScaleType.FIT_CENTER);code.setContentDescription("赞助码");
         try(InputStream in=getAssets().open("sponsor.png")){Bitmap bitmap=BitmapFactory.decodeStream(in);if(bitmap==null)throw new java.io.IOException();code.setImageBitmap(bitmap);}catch(java.io.IOException e){TextView error=text("赞助码暂时无法显示",14,theme.text,false);plate.addView(error);}
         plate.addView(code,new FrameLayout.LayoutParams(-1,-2));sponsor.addView(plate,new LinearLayout.LayoutParams(-1,-2));gap(sponsor,16);
-        TextView caption=text("觉得好用就打赏一杯咖啡吧",13,ThemePalette.readable(theme.muted,theme.entrySurface,4.5),false);caption.setGravity(Gravity.CENTER);caption.setLineSpacing(dp(3),1);sponsor.addView(caption,new LinearLayout.LayoutParams(-1,-2));content.addView(sponsor);gap(content,16);
+        TextView caption=text("赞助记得备注名字",13,ThemePalette.readable(theme.muted,theme.entrySurface,4.5),false);caption.setGravity(Gravity.CENTER);caption.setLineSpacing(dp(3),1);sponsor.addView(caption,new LinearLayout.LayoutParams(-1,-2));content.addView(sponsor);gap(content,16);
         String current="1.0.1";try{current=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
         LinearLayout version=card();version.setOrientation(LinearLayout.HORIZONTAL);version.setGravity(Gravity.CENTER_VERTICAL);version.addView(text("版本号",15,theme.text,false),new LinearLayout.LayoutParams(0,-2,1));
         TextView updateEntry=text("检查更新",12,theme.deepAccent,true);updateEntry.setGravity(Gravity.CENTER);updateEntry.setSingleLine(true);updateEntry.setPadding(dp(10),dp(7),dp(10),dp(7));updateEntry.setMinHeight(dp(36));updateEntry.setFocusable(true);updateEntry.setBackground(new RippleDrawable(ColorStateList.valueOf((theme.primary&0xffffff)|0x22000000),shape(theme.controlSurface,12),shape(theme.rippleMask,12)));LinearLayout.LayoutParams updateSize=new LinearLayout.LayoutParams(-2,-2);updateSize.rightMargin=dp(10);version.addView(updateEntry,updateSize);updatePrompt=new UpdatePrompt(this,theme,updateEntry,saved);updateEntry.setOnClickListener(v->updatePrompt.check());
@@ -88,6 +89,19 @@ public final class AboutActivity extends Activity {
         TextView supportNote=text("感谢以下同学在开发与测试中的帮助",12,ThemePalette.readable(theme.muted,theme.entrySurface,4.5),false);supportNote.setGravity(Gravity.CENTER);supportNote.setLineSpacing(dp(3),1);gap(support,10);support.addView(supportNote,new LinearLayout.LayoutParams(-1,-2));
         for(String name:SUPPORT){LinearLayout row=column();row.setGravity(Gravity.CENTER);gap(support,10);TextView person=text(name,14,theme.deepAccent,true);person.setGravity(Gravity.CENTER);person.setPadding(dp(18),dp(9),dp(18),dp(9));person.setBackground(shape(theme.controlSurface,14));row.addView(person,new LinearLayout.LayoutParams(-2,-2));support.addView(row,new LinearLayout.LayoutParams(-1,-2));}
         content.addView(support);gap(content,16);
+        LinearLayout appreciation=card();
+        TextView appreciationTitle=text("开发赞赏",22,theme.deepAccent,true);
+        appreciationTitle.setGravity(Gravity.CENTER);
+        appreciation.addView(appreciationTitle,new LinearLayout.LayoutParams(-1,-2));
+        for(String name:new String[]{"Isri3595","Young"}){
+            LinearLayout row=column();row.setGravity(Gravity.CENTER);gap(appreciation,10);
+            TextView person=text(name,14,theme.deepAccent,true);
+            person.setGravity(Gravity.CENTER);person.setPadding(dp(18),dp(9),dp(18),dp(9));
+            person.setBackground(shape(theme.controlSurface,14));
+            row.addView(person,new LinearLayout.LayoutParams(-2,-2));
+            appreciation.addView(row,new LinearLayout.LayoutParams(-1,-2));
+        }
+        content.addView(appreciation);gap(content,16);
         setContentView(root);
         Ui.stagger(content,0);
     }

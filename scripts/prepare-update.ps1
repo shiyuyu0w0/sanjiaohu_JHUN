@@ -1,5 +1,5 @@
 param(
-    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.2.1.apk",
+    [string]$Apk = "$PSScriptRoot/../Sanjiaohu-1.2.2.apk",
     [Parameter(Mandatory=$true)][long]$ManifestRevision,
     [Parameter(Mandatory=$true)][string]$NotesFile,
     [string]$Output = "$PSScriptRoot/../updates/stable/version.json",

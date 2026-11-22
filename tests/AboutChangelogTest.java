@@ -14,7 +14,7 @@ public final class AboutChangelogTest {
 
     public static void main(String[] args) {
         String[][] updates = AboutActivity.UPDATES;
-        String[] versions={"v1.2.1","v1.2.0","v1.1.9","v1.1.8","v1.1.7","v1.1.6","v1.1.5","v1.1.4","v1.1.3","v1.1.2","v1.1.1","v1.1.0"};
+        String[] versions={"v1.2.2","v1.2.1","v1.2.0","v1.1.9","v1.1.8","v1.1.7","v1.1.6","v1.1.5","v1.1.4","v1.1.3","v1.1.2","v1.1.1","v1.1.0"};
         check(updates.length == versions.length, "one entry per known version");
         for(int i=0;i<updates.length;i++){
             String[] entry=updates[i];
@@ -31,23 +31,25 @@ public final class AboutChangelogTest {
             check(!entry[1].contains("\\n"),"real line breaks in "+entry[0]);
             check(!entry[1].contains("`")&&!entry[1].contains("**"),"plain text in "+entry[0]);
         }
-        if(updates.length>=12){
-            check(updates[0][1].contains("单次日程")&&updates[0][1].contains("08:20–21:40")&&updates[0][1].contains("滑动"),"v1.2.1 records dated events and bounded time wheels");
-            check(updates[0][1].contains("跨格")&&updates[0][1].contains("冲突")&&updates[0][1].contains("背景图片"),"v1.2.1 records layout and conflict handling");
-            check(updates[1][1].contains("优化首页")&&updates[1][1].contains("动效")&&updates[1][1].contains("移除预设颜色"),"v1.2.0 records UI, motion and palette simplification");
-            check(updates[1][1].contains("桌面小组件")&&updates[1][1].contains("图片裁切"),"v1.2.0 records the new desktop widget");
-            check(updates[2][1].contains("默认打开课表")&&updates[2][1].contains("动效")&&updates[2][1].contains("震动"),"v1.1.9 records navigation and feedback");
-            check(updates[2][1].contains("留白")&&updates[2][1].contains("登录")&&updates[2][1].contains("图书查询"),"v1.1.9 records fixes");
-            check(updates[3][1].contains("图书查询")&&updates[3][1].contains("馆藏"),"v1.1.8 records the book query");
-            check(updates[4][1].contains("扫码")&&updates[4][1].contains("缴费订单"),"v1.1.7 records QR login and order history");
-            check(updates[5][1].contains("Gitee")&&updates[5][1].contains("登录失败")&&updates[5][1].contains("实验报告"),"v1.1.6 records download, login and report changes");
-            check(updates[6][1].contains("北区18舍")&&updates[6][1].contains("电表"),"v1.1.5 records dorm meter fixes");
-            check(updates[7][1].contains("校准")&&updates[7][1].contains("实验报告"),"v1.1.4 records schedule and upload fixes");
-            check(updates[8][1].contains("刷新")&&updates[8][1].contains("考试"),"v1.1.3 records visual improvements");
-            check(updates[9][1].contains("检查新版本")&&updates[9][1].contains("安装包"),"v1.1.2 records the updater");
-            check(updates[10][1].contains("课表")&&updates[10][1].contains("跨校区"),"v1.1.1 records fixes");
-            check(updates[11][1].contains("考试查询")&&updates[11][1].contains("电量"),"v1.1.0 records new functions");
-            check(!updates[8][1].contains("检查新版本"),"v1.1.2 updater is not listed as new in v1.1.3");
+        if(updates.length>=13){
+            check(updates[0][1].contains("原授课教师")&&updates[0][1].contains("课程名")&&updates[0][1].contains("旧备注"),"v1.2.2 records teacher sync and course notes");
+            check(updates[0][1].contains("开发赞赏")&&updates[0][1].contains("Isri3595")&&updates[0][1].contains("Young"),"v1.2.2 records developer appreciation");
+            check(updates[1][1].contains("单次日程")&&updates[1][1].contains("08:20–21:40")&&updates[1][1].contains("滑动"),"v1.2.1 records dated events and bounded time wheels");
+            check(updates[1][1].contains("跨格")&&updates[1][1].contains("冲突")&&updates[1][1].contains("背景图片"),"v1.2.1 records layout and conflict handling");
+            check(updates[2][1].contains("优化首页")&&updates[2][1].contains("动效")&&updates[2][1].contains("移除预设颜色"),"v1.2.0 records UI, motion and palette simplification");
+            check(updates[2][1].contains("桌面小组件")&&updates[2][1].contains("图片裁切"),"v1.2.0 records the new desktop widget");
+            check(updates[3][1].contains("默认打开课表")&&updates[3][1].contains("动效")&&updates[3][1].contains("震动"),"v1.1.9 records navigation and feedback");
+            check(updates[3][1].contains("留白")&&updates[3][1].contains("登录")&&updates[3][1].contains("图书查询"),"v1.1.9 records fixes");
+            check(updates[4][1].contains("图书查询")&&updates[4][1].contains("馆藏"),"v1.1.8 records the book query");
+            check(updates[5][1].contains("扫码")&&updates[5][1].contains("缴费订单"),"v1.1.7 records QR login and order history");
+            check(updates[6][1].contains("Gitee")&&updates[6][1].contains("登录失败")&&updates[6][1].contains("实验报告"),"v1.1.6 records download, login and report changes");
+            check(updates[7][1].contains("北区18舍")&&updates[7][1].contains("电表"),"v1.1.5 records dorm meter fixes");
+            check(updates[8][1].contains("校准")&&updates[8][1].contains("实验报告"),"v1.1.4 records schedule and upload fixes");
+            check(updates[9][1].contains("刷新")&&updates[9][1].contains("考试"),"v1.1.3 records visual improvements");
+            check(updates[10][1].contains("检查新版本")&&updates[10][1].contains("安装包"),"v1.1.2 records the updater");
+            check(updates[11][1].contains("课表")&&updates[11][1].contains("跨校区"),"v1.1.1 records fixes");
+            check(updates[12][1].contains("考试查询")&&updates[12][1].contains("电量"),"v1.1.0 records new functions");
+            check(!updates[9][1].contains("检查新版本"),"v1.1.2 updater is not listed as new in v1.1.3");
         }
         check(AboutActivity.SUPPORT.length == 2, "technical support lists two names");
         check("GuangG".equals(AboutActivity.SUPPORT[0]), "first support name is GuangG");

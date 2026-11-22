@@ -2,7 +2,7 @@
 
 三角狐是一款面向江汉大学学生的 Android 校园工具，将课表、成绩、考试和常用校园服务集中在一个应用中。支持 Android 8.0 及以上系统。
 
-[v1.2.1 更新说明](updates/release-notes-1.2.1.md) · [发布准备与校验结果](docs/release-1.2.1.md)
+[v1.2.2 更新说明](updates/release-notes-1.2.2.md) · [发布准备与校验结果](docs/release-1.2.2.md)
 
 ## 功能
 

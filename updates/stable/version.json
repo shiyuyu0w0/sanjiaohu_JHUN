@@ -1,30 +1,29 @@
 {
   "schemaVersion": 1,
-  "manifestRevision": 19,
+  "manifestRevision": 23,
   "enabled": true,
   "channel": "stable",
   "packageName": "cn.jhun.sanjiaohu",
-  "versionCode": 54,
-  "versionName": "1.2.1",
+  "versionCode": 55,
+  "versionName": "1.2.2",
   "minSdk": 26,
   "releaseNotes": [
-    "新增单次日程，点击课表空白格即可填写标题和备注，仅在选定日期显示",
-    "日程支持在 08:20–21:40 内按分钟选择时间，滑动选择器适配主题与深色模式",
-    "长日程直接跨格显示，保持课表格子大小，修复背景图片被横条遮挡的问题",
-    "保存前检查当天教务课程与自定义课程的冲突，提示冲突课程并保留已填写内容",
-    "支持查看、编辑和删除日程，本地保存，不受教务课表更新影响"
+    "修复换老师后部分课次仍显示原授课教师的问题",
+    "逐条核对调课通知的学期和排课，处理连续换老师的情况，无法匹配时提示原因",
+    "教务课程备注按同一学期的课程名保存和查看，换老师后仍可查看旧备注",
+    "关于页新增开发赞赏，感谢 Isri3595 和 Young"
   ],
-  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.2.1",
+  "releasePage": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/tag/v1.2.2",
   "apk": {
-    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.1/Sanjiaohu-1.2.1.apk",
-    "gitee": "https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.1/Sanjiaohu-1.2.1.apk",
-    "sizeBytes": 2659843,
-    "sha256": "fce463916c4e07b61a26af18d57fb032c3e376d0d9a91ad71c6b138ffbb843ea",
+    "url": "https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.2/Sanjiaohu-1.2.2.apk",
+    "gitee": "https://gitee.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.2/Sanjiaohu-1.2.2.apk",
+    "sizeBytes": 2668117,
+    "sha256": "bcbaf263b96790c1662be0b1c62d158b97da37a149c5c9e3dd4e590b819bb62a",
     "mirrors": [
       {
         "id": "ghproxy",
         "name": "Accelerated",
-        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.1/Sanjiaohu-1.2.1.apk"
+        "url": "https://ghproxy.net/https://github.com/shiyuyu0w0/sanjiaohu_JHUN/releases/download/v1.2.2/Sanjiaohu-1.2.2.apk"
       }
     ]
   }
